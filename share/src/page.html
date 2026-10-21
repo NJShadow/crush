@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="windows-1252">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline' 'wasm-unsafe-eval'; style-src 'unsafe-inline'; img-src data: blob:; connect-src 'none'; form-action 'none'; base-uri 'none'">
+<meta name="referrer" content="no-referrer">
+<title>{{TITLE}}</title>
+<script>
+/* If the page was cut off in transit, the program at its end never arrives. Say so. */
+addEventListener("load", function () { setTimeout(function () {
+  if (!window.__crushBoot && document.body.getAttribute("data-state") === "loading") {
+    var s = document.getElementById("status");
+    if (s) { s.textContent = "This page is incomplete - it was cut off when it was saved or sent, so the files cannot be unpacked. Ask for it again."; s.className = "status bad"; }
+    document.body.setAttribute("data-state", "error");
+  } }, 100); });
+</script>
+<style>
+:root{--bg:#f6f5f2;--card:#fff;--ink:#1d1d1f;--mute:#5f6368;--line:#e3e1dc;--acc:#2f5bd3;--acc-ink:#fff;--ok:#1e7a46;--ok-bg:#e5f3ea;--bad:#b3261e;--bad-bg:#fbe9e7;--warn:#8a5a00;--warn-bg:#fdf3dc;}
+@media (prefers-color-scheme: dark){:root{--bg:#141416;--card:#1e1f22;--ink:#ececee;--mute:#a0a3a8;--line:#303236;--acc:#7c9cff;--acc-ink:#0b0d14;--ok:#7fd3a0;--ok-bg:#183223;--bad:#ff8a80;--bad-bg:#3a1c1a;--warn:#f2c46b;--warn-bg:#3a2e14;}}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+main{max-width:760px;margin:0 auto;padding:24px 16px 48px}
+h1{font-size:1.45rem;line-height:1.25;margin:0 0 4px;word-break:break-word}
+.sub{color:var(--mute);margin:0 0 18px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:18px;margin:0 0 16px}
+.card h2{font-size:1.05rem;margin:0 0 8px}
+p{margin:0 0 10px}
+.small{font-size:.9rem;color:var(--mute)}
+.status{padding:12px 14px;border-radius:10px;background:var(--card);border:1px solid var(--line);margin:0 0 16px}
+.status.good{background:var(--ok-bg);border-color:transparent;color:var(--ok)}
+.status.bad{background:var(--bad-bg);border-color:transparent;color:var(--bad)}
+.status.warn{background:var(--warn-bg);border-color:transparent;color:var(--warn)}
+progress{width:100%;height:8px;margin:-8px 0 16px;accent-color:var(--acc)}
+button{font:inherit;border-radius:10px;border:1px solid var(--line);background:var(--card);color:var(--ink);padding:9px 14px;cursor:pointer;min-height:44px}
+button.primary{background:var(--acc);color:var(--acc-ink);border-color:transparent;font-weight:600;width:100%}
+button:disabled{opacity:.45;cursor:default}
+input[type=password],input[type=text]{font:inherit;width:100%;padding:11px 12px;border-radius:10px;border:1px solid var(--line);background:var(--bg);color:var(--ink);margin:4px 0 8px;min-height:44px}
+label.inline{display:flex;gap:8px;align-items:center;font-size:.92rem;color:var(--mute);margin:0 0 12px}
+ul.files{list-style:none;margin:0 0 14px;padding:0}
+li.file{display:grid;grid-template-columns:1fr auto;gap:2px 12px;padding:10px 0;border-top:1px solid var(--line)}
+li.file:first-child{border-top:0}
+.fname{grid-column:1;word-break:break-all}
+.fname .dir{color:var(--mute)}
+.fmeta{grid-column:1;display:flex;flex-wrap:wrap;gap:8px;align-items:center;font-size:.88rem;color:var(--mute)}
+li.file button.save{grid-column:2;grid-row:1 / span 2;align-self:center}
+.why{grid-column:1 / span 2;font-size:.88rem;color:var(--bad)}
+.chip{border-radius:999px;padding:1px 9px;font-size:.8rem;background:var(--bg);border:1px solid var(--line)}
+.chip.ok{color:var(--ok);background:var(--ok-bg);border-color:transparent}
+.chip.bad{color:var(--bad);background:var(--bad-bg);border-color:transparent}
+details summary{cursor:pointer;color:var(--mute)}
+.kv{display:grid;grid-template-columns:minmax(110px,30%) 1fr;gap:8px;font-size:.86rem;padding:4px 0;border-top:1px solid var(--line)}
+.kv .k{color:var(--mute)} .kv .v{word-break:break-all}
+noscript .card{border-color:var(--bad)}
+</style>
+</head>
+<body data-state="loading">
+<main>
+<h1>{{HEADING}}</h1>
+<p class="sub">A Crush archive that opens itself &mdash; <span id="archsize">{{SIZE}}</span>. Everything happens in this browser; nothing is uploaded.</p>
+
+<noscript><div class="card"><h2>This page needs JavaScript</h2><p>It unpacks the files inside your browser, so JavaScript must be on. If you opened it from an email or a file preview, save it first and open the saved copy in a browser.</p></div></noscript>
+
+
+<div id="status" class="status" role="status" aria-live="polite">Opening&hellip;</div>
+<progress id="progress" max="1" value="0" hidden></progress>
+
+<div id="lockcard" class="card" hidden>
+<h2>This archive is locked</h2>
+<p>Enter the passphrase you were given. It is used only inside this page and is never stored or sent anywhere.</p>
+<form id="unlockform" autocomplete="off">
+<label for="pw" class="small">Passphrase</label>
+<input id="pw" type="password" autocomplete="off" autocapitalize="off" spellcheck="false" enterkeyhint="go">
+<label class="inline"><input id="showpw" type="checkbox"> Show what I type</label>
+<button id="unlockbtn" class="primary" type="submit">Unlock</button>
+</form>
+<p class="small" id="lockcost" style="margin-top:10px"></p>
+</div>
+
+<div id="listcard" class="card" hidden>
+<h2>Inside</h2>
+<p class="small" id="summary"></p>
+<ul id="files" class="files"></ul>
+<button id="checkbtn" class="primary" hidden>Rebuild and check the files</button>
+<button id="saveall" class="primary" hidden disabled>Save all</button>
+<p class="small" id="saveall-note" style="margin-top:8px"></p>
+</div>
+
+<div class="card">
+<h2>What this is</h2>
+<p>This single page carries files that were packed with Crush, together with everything needed to unpack them. Your browser does all the work: nothing is uploaded, nothing is installed, and the page makes no network connections at all &mdash; it works offline.</p>
+<p class="small">Every file is checked against a fingerprint (SHA-256) taken when it was packed. A file is only offered for saving if it matches, so what you save is exactly what was sent.</p>
+</div>
+
+<details class="card"><summary>Technical details</summary><div id="tech" style="margin-top:10px"></div></details>
+<p class="small">Made with Crush. Large archives need memory roughly equal to their unpacked size; on a phone, archives up to a few hundred megabytes are the practical limit.</p>
+</main>
+{{SCRIPTS}}
+</body>
+</html>

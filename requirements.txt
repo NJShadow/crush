@@ -1,0 +1,22 @@
+# Crush dependencies. Crush.bat installs these automatically on first run;
+# this file is for anyone setting up by hand or in a virtualenv.
+#
+#   python -m pip install -r requirements.txt
+
+numpy                 # array work across the numeric and structural layers
+zstandard             # a tournament codec, and the archive index codec
+brotli                # a tournament codec
+pyppmd                # PPMd, strong on prose and code
+cryptography          # XChaCha20-Poly1305 and HKDF, for optional encryption
+argon2-cffi           # Argon2id key stretching; without it Crush falls back to scrypt
+pywebview             # the native window (Windows: also needs pythonnet/clr-loader)
+segno                 # QR codes, for the paper backup (Share)
+reportlab             # writes the paper backup PDF
+pillow                # images for the QR channels
+
+# Optional: restoring a paper backup / QR video from photos or scans on this
+# computer (the receive.html page in channels/dist needs nothing):
+# pyzbar pypdfium2    (and ffmpeg on PATH for the QR video)
+
+# Only needed to run the browser-based tests in tests/:
+# playwright

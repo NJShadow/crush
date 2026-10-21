@@ -1,0 +1,791 @@
+{
+ "corpus_total": 133497698,
+ "crush_total": 37260881,
+ "crush_pct": 27.911253570829363,
+ "solid": {
+  "ZIP -9": 53767871,
+  "tar + Zstandard -19": 49199590,
+  "tar + xz -9e": 42531388,
+  "7-Zip -mx=9 (solid)": 41780398,
+  "Crush (crush tier)": 37260881
+ },
+ "per_file_baseline": {
+  "zip -9": {
+   "total": 53767923,
+   "pct": 40.28,
+   "sec": 13.4
+  },
+  "zstd -19": {
+   "total": 49155851,
+   "pct": 36.82,
+   "sec": 65.6
+  },
+  "brotli -q11": {
+   "total": 45536493,
+   "pct": 34.11,
+   "sec": 270.4
+  },
+  "xz -9e": {
+   "total": 44256616,
+   "pct": 33.15,
+   "sec": 160.5
+  },
+  "7z -mx=9": {
+   "total": 43540269,
+   "pct": 32.61,
+   "sec": 40.6
+  },
+  "7z PPMd": {
+   "total": 44157712,
+   "pct": 33.08,
+   "sec": 28.2
+  },
+  "7z LZMA2+BCJ2": {
+   "total": 44762487,
+   "pct": 33.53,
+   "sec": 33.4
+  }
+ },
+ "rows": [
+  {
+   "cls": "text",
+   "label": "Text & documents",
+   "n": 4,
+   "in": 38883303,
+   "out": 4267376,
+   "pct": 10.974828964504379,
+   "codec": "LZMA2 tuned for text",
+   "transforms": [],
+   "exact": true,
+   "best_competitor": 4597916,
+   "vs_best": 7.18890906227952,
+   "competitors": {
+    "zip -9": 7112625,
+    "zstd -19": 5331433,
+    "brotli -q11": 5071791,
+    "xz -9e": 5160452,
+    "7z -mx=9": 5262195,
+    "7z PPMd": 4597916
+   },
+   "trial": [
+    {
+     "codec": "Zstandard-22",
+     "size": 4504889
+    },
+    {
+     "codec": "LZMA2",
+     "size": 4280976
+    },
+    {
+     "codec": "Brotli-11",
+     "size": 4466707
+    },
+    {
+     "codec": "LZMA2 tuned for text",
+     "size": 4267376
+    },
+    {
+     "codec": "PPMd order-16",
+     "size": 4362026
+    },
+    {
+     "codec": "Stored",
+     "size": 38883303
+    }
+   ]
+  },
+  {
+   "cls": "generic",
+   "label": "Other files",
+   "n": 5,
+   "in": 26080000,
+   "out": 12324524,
+   "pct": 47.25661042944785,
+   "codec": "LZMA2 + delta",
+   "transforms": [
+    "transpose"
+   ],
+   "exact": true,
+   "best_competitor": 12884912,
+   "vs_best": 4.349179877984421,
+   "competitors": {
+    "zip -9": 14610293,
+    "zstd -19": 14041696,
+    "brotli -q11": 13449323,
+    "xz -9e": 12884912,
+    "7z -mx=9": 12890762,
+    "7z PPMd": 13673482
+   },
+   "trial": [
+    {
+     "codec": "Zstandard-22",
+     "size": 12972376
+    },
+    {
+     "codec": "LZMA2",
+     "size": 12485204
+    },
+    {
+     "codec": "Brotli-11",
+     "size": 12824712
+    },
+    {
+     "codec": "LZMA2 + delta",
+     "size": 12324524
+    },
+    {
+     "codec": "Stored",
+     "size": 26080000
+    }
+   ]
+  },
+  {
+   "cls": "exe_elf",
+   "label": "Linux/Unix programs",
+   "n": 1,
+   "in": 20000000,
+   "out": 3215368,
+   "pct": 16.07684,
+   "codec": "LZMA2",
+   "transforms": [],
+   "exact": true,
+   "best_competitor": 3215436,
+   "vs_best": 0.0021147987395799513,
+   "competitors": {
+    "zip -9": 4776765,
+    "zstd -19": 4619633,
+    "brotli -q11": 3495914,
+    "xz -9e": 3215436,
+    "7z -mx=9": 3281706,
+    "7z PPMd": 3623131
+   },
+   "trial": [
+    {
+     "codec": "Zstandard-22",
+     "size": 4122896
+    },
+    {
+     "codec": "LZMA2",
+     "size": 3215368
+    },
+    {
+     "codec": "Brotli-11",
+     "size": 3495914
+    },
+    {
+     "codec": "LZMA2 + x86 filter",
+     "size": 3309999
+    },
+    {
+     "codec": "Stored",
+     "size": 20000000
+    }
+   ]
+  },
+  {
+   "cls": "wav",
+   "label": "Uncompressed audio",
+   "n": 1,
+   "in": 11525724,
+   "out": 3610787,
+   "pct": 31.328071017490963,
+   "codec": "LZMA2",
+   "transforms": [
+    "audio_predict",
+    "transpose"
+   ],
+   "exact": true,
+   "best_competitor": 3807051,
+   "vs_best": 5.155276354322545,
+   "competitors": {
+    "zip -9": 7113660,
+    "zstd -19": 6375114,
+    "brotli -q11": 5186003,
+    "xz -9e": 4717088,
+    "7z -mx=9": 3807051,
+    "7z PPMd": 3970052
+   },
+   "trial": [
+    {
+     "codec": "Zstandard-22",
+     "size": 3802701
+    },
+    {
+     "codec": "LZMA2",
+     "size": 3610787
+    },
+    {
+     "codec": "Brotli-11",
+     "size": 3629050
+    },
+    {
+     "codec": "LZMA2 + delta",
+     "size": 4030162
+    },
+    {
+     "codec": "Stored",
+     "size": 23051404
+    }
+   ]
+  },
+  {
+   "cls": "code",
+   "label": "Source code",
+   "n": 2,
+   "in": 10000000,
+   "out": 1351329,
+   "pct": 13.51329,
+   "codec": "PPMd order-16",
+   "transforms": [],
+   "exact": true,
+   "best_competitor": 1336353,
+   "vs_best": -1.1206619807790308,
+   "competitors": {
+    "zip -9": 2108120,
+    "zstd -19": 1532855,
+    "brotli -q11": 1474815,
+    "xz -9e": 1486836,
+    "7z -mx=9": 1496568,
+    "7z PPMd": 1336353
+   },
+   "trial": [
+    {
+     "codec": "Zstandard-22",
+     "size": 1516680
+    },
+    {
+     "codec": "LZMA2",
+     "size": 1476050
+    },
+    {
+     "codec": "Brotli-11",
+     "size": 1469365
+    },
+    {
+     "codec": "LZMA2 tuned for text",
+     "size": 1470346
+    },
+    {
+     "codec": "PPMd order-16",
+     "size": 1351329
+    },
+    {
+     "codec": "Stored",
+     "size": 10000000
+    }
+   ]
+  },
+  {
+   "cls": "zipfamily",
+   "label": "Zip-based files",
+   "n": 3,
+   "in": 8213859,
+   "out": 4357788,
+   "pct": 53.05408821846102,
+   "codec": "LZMA2",
+   "transforms": [
+    "zip_recompose",
+    "deflate_unwrap"
+   ],
+   "exact": false,
+   "best_competitor": 8131764,
+   "vs_best": 46.410299167560694,
+   "competitors": {
+    "zip -9": 8176139,
+    "zstd -19": 8147428,
+    "brotli -q11": 8131764,
+    "xz -9e": 8146192,
+    "7z -mx=9": 8140009,
+    "7z PPMd": 8246621
+   },
+   "trial": [
+    {
+     "codec": "Zstandard-22",
+     "size": 4740693
+    },
+    {
+     "codec": "LZMA2",
+     "size": 4357788
+    },
+    {
+     "codec": "Brotli-11",
+     "size": 4515422
+    },
+    {
+     "codec": "LZMA2 tuned for text",
+     "size": 4364265
+    },
+    {
+     "codec": "PPMd order-16",
+     "size": 4868665
+    },
+    {
+     "codec": "Stored",
+     "size": 23986107
+    }
+   ]
+  },
+  {
+   "cls": "db",
+   "label": "Databases",
+   "n": 1,
+   "in": 7135232,
+   "out": 2139107,
+   "pct": 29.97950171767365,
+   "codec": "PPMd order-16",
+   "transforms": [],
+   "exact": true,
+   "best_competitor": 2139245,
+   "vs_best": 0.006450874023311963,
+   "competitors": {
+    "zip -9": 2968802,
+    "zstd -19": 2583277,
+    "brotli -q11": 2337956,
+    "xz -9e": 2287012,
+    "7z -mx=9": 2313181,
+    "7z PPMd": 2139245
+   },
+   "trial": [
+    {
+     "codec": "Zstandard-22",
+     "size": 2594297
+    },
+    {
+     "codec": "LZMA2",
+     "size": 2286942
+    },
+    {
+     "codec": "Brotli-11",
+     "size": 2337956
+    },
+    {
+     "codec": "LZMA2 tuned for text",
+     "size": 2279651
+    },
+    {
+     "codec": "PPMd order-16",
+     "size": 2139107
+    },
+    {
+     "codec": "LZMA2 + delta",
+     "size": 3466412
+    },
+    {
+     "codec": "Stored",
+     "size": 7135232
+    }
+   ]
+  },
+  {
+   "cls": "exe_pe",
+   "label": "Windows programs",
+   "n": 3,
+   "in": 6911056,
+   "out": 1825567,
+   "pct": 26.415167233487907,
+   "codec": "LZMA2 + x86 filter",
+   "transforms": [],
+   "exact": true,
+   "best_competitor": 1877971,
+   "vs_best": 2.790458425609341,
+   "competitors": {
+    "zip -9": 2420327,
+    "zstd -19": 2057235,
+    "brotli -q11": 1936309,
+    "xz -9e": 1888948,
+    "7z -mx=9": 1877971,
+    "7z PPMd": 2096756
+   },
+   "trial": [
+    {
+     "codec": "Zstandard-22",
+     "size": 2035675
+    },
+    {
+     "codec": "LZMA2",
+     "size": 1872701
+    },
+    {
+     "codec": "Brotli-11",
+     "size": 1919660
+    },
+    {
+     "codec": "LZMA2 + x86 filter",
+     "size": 1825567
+    },
+    {
+     "codec": "Stored",
+     "size": 6911056
+    }
+   ]
+  },
+  {
+   "cls": "png",
+   "label": "PNG images",
+   "n": 2,
+   "in": 2055491,
+   "out": 1854850,
+   "pct": 90.23877993141298,
+   "codec": "Brotli-11",
+   "transforms": [
+    "png_unwrap"
+   ],
+   "exact": true,
+   "best_competitor": 2022563,
+   "vs_best": 8.292102644021472,
+   "competitors": {
+    "zip -9": 2040372,
+    "zstd -19": 2040076,
+    "brotli -q11": 2041115,
+    "xz -9e": 2034448,
+    "7z -mx=9": 2035116,
+    "7z PPMd": 2022563
+   },
+   "trial": [
+    {
+     "codec": "Zstandard-22",
+     "size": 1964171
+    },
+    {
+     "codec": "LZMA2",
+     "size": 1909310
+    },
+    {
+     "codec": "Brotli-11",
+     "size": 1854850
+    },
+    {
+     "codec": "Stored",
+     "size": 12251840
+    }
+   ]
+  },
+  {
+   "cls": "media",
+   "label": "Compressed media",
+   "n": 1,
+   "in": 1569898,
+   "out": 1561390,
+   "pct": 99.45805396274153,
+   "codec": "Zstandard-22",
+   "transforms": [],
+   "exact": true,
+   "best_competitor": 1552840,
+   "vs_best": -0.5506040545065815,
+   "competitors": {
+    "zip -9": 1563508,
+    "zstd -19": 1561366,
+    "brotli -q11": 1552840,
+    "xz -9e": 1568744,
+    "7z -mx=9": 1568470,
+    "7z PPMd": 1580491
+   },
+   "trial": [
+    {
+     "codec": "Zstandard-22",
+     "size": 1561390
+    },
+    {
+     "codec": "LZMA2",
+     "size": 1568678
+    },
+    {
+     "codec": "Stored",
+     "size": 1569898
+    }
+   ]
+  },
+  {
+   "cls": "jpeg",
+   "label": "JPEG photos",
+   "n": 2,
+   "in": 677415,
+   "out": 529202,
+   "pct": 78.12079744322166,
+   "codec": "Zstandard-22",
+   "transforms": [
+    "jpegxl"
+   ],
+   "exact": true,
+   "best_competitor": 643402,
+   "vs_best": 17.749400841153744,
+   "competitors": {
+    "zip -9": 647062,
+    "zstd -19": 646266,
+    "brotli -q11": 643402,
+    "xz -9e": 650800,
+    "7z -mx=9": 651151,
+    "7z PPMd": 645537
+   },
+   "trial": [
+    {
+     "codec": "Zstandard-22",
+     "size": 529202
+    },
+    {
+     "codec": "LZMA2",
+     "size": 529745
+    },
+    {
+     "codec": "Brotli-11",
+     "size": 529722
+    },
+    {
+     "codec": "Stored",
+     "size": 529717
+    }
+   ]
+  },
+  {
+   "cls": "pdf",
+   "label": "PDF documents",
+   "n": 1,
+   "in": 361228,
+   "out": 178573,
+   "pct": 49.434982891691675,
+   "codec": "Brotli-11",
+   "transforms": [],
+   "exact": true,
+   "best_competitor": 178994,
+   "vs_best": 0.23520341463959685,
+   "competitors": {
+    "zip -9": 188830,
+    "zstd -19": 180856,
+    "brotli -q11": 178994,
+    "xz -9e": 180288,
+    "7z -mx=9": 180576,
+    "7z PPMd": 187423
+   },
+   "trial": [
+    {
+     "codec": "Zstandard-22",
+     "size": 180733
+    },
+    {
+     "codec": "LZMA2",
+     "size": 180224
+    },
+    {
+     "codec": "Brotli-11",
+     "size": 178573
+    },
+    {
+     "codec": "LZMA2 tuned for text",
+     "size": 179751
+    },
+    {
+     "codec": "PPMd order-16",
+     "size": 187293
+    },
+    {
+     "codec": "Stored",
+     "size": 361228
+    }
+   ]
+  },
+  {
+   "cls": "font",
+   "label": "Fonts",
+   "n": 1,
+   "in": 84492,
+   "out": 35393,
+   "pct": 41.889172939449885,
+   "codec": "LZMA2",
+   "transforms": [],
+   "exact": true,
+   "best_competitor": 35460,
+   "vs_best": 0.1889452904681331,
+   "competitors": {
+    "zip -9": 41420,
+    "zstd -19": 38616,
+    "brotli -q11": 36267,
+    "xz -9e": 35460,
+    "7z -mx=9": 35513,
+    "7z PPMd": 38142
+   },
+   "trial": [
+    {
+     "codec": "Zstandard-22",
+     "size": 38764
+    },
+    {
+     "codec": "LZMA2",
+     "size": 35393
+    },
+    {
+     "codec": "Brotli-11",
+     "size": 36267
+    },
+    {
+     "codec": "Stored",
+     "size": 84492
+    }
+   ]
+  }
+ ],
+ "stats": {
+  "classes": {
+   "media": {
+    "n": 1,
+    "in": 1569898,
+    "after_transform": 1569898
+   },
+   "wav": {
+    "n": 1,
+    "in": 11525724,
+    "after_transform": 23051404
+   },
+   "exe_elf": {
+    "n": 1,
+    "in": 20000000,
+    "after_transform": 20000000
+   },
+   "exe_pe": {
+    "n": 3,
+    "in": 6911056,
+    "after_transform": 6911056
+   },
+   "code": {
+    "n": 2,
+    "in": 10000000,
+    "after_transform": 10000000
+   },
+   "zipfamily": {
+    "n": 3,
+    "in": 8213859,
+    "after_transform": 23986107
+   },
+   "generic": {
+    "n": 5,
+    "in": 26080000,
+    "after_transform": 26080000
+   },
+   "db": {
+    "n": 1,
+    "in": 7135232,
+    "after_transform": 7135232
+   },
+   "text": {
+    "n": 4,
+    "in": 38883303,
+    "after_transform": 38883303
+   },
+   "font": {
+    "n": 1,
+    "in": 84492,
+    "after_transform": 84492
+   },
+   "pdf": {
+    "n": 1,
+    "in": 361228,
+    "after_transform": 361228
+   },
+   "png": {
+    "n": 2,
+    "in": 2055491,
+    "after_transform": 12251840
+   },
+   "jpeg": {
+    "n": 2,
+    "in": 677415,
+    "after_transform": 529717
+   }
+  },
+  "transforms": {
+   "audio_predict": 1,
+   "transpose": 3,
+   "zip_recompose": 2,
+   "deflate_unwrap": 1,
+   "png_unwrap": 2,
+   "jpegxl": 2
+  },
+  "codecs": {
+   "ppmd": 2,
+   "lzma": 4,
+   "lzma_x86": 1,
+   "lzma_d4": 1,
+   "zstd22": 2,
+   "brotli": 2,
+   "lzma_text": 1
+  },
+  "dedup_bytes": 0,
+  "dedup_files": 0,
+  "recomposed": 2
+ },
+ "entropy": {
+  "test1": {
+   "n": 4000,
+   "smaller": 0,
+   "total_in": 1024000,
+   "total_out": 1064000
+  },
+  "test2": [
+   2000000,
+   188092,
+   188164,
+   188236,
+   188308,
+   188380,
+   188452,
+   188524,
+   188588,
+   188660,
+   188732,
+   188804,
+   188876
+  ],
+  "test3": [
+   {
+    "file": "text_english.txt",
+    "o0": 5.16133369678796,
+    "o1": 3.753739473422418,
+    "o2": 2.4450148291071705,
+    "o3": 1.442065948479021,
+    "xz": 0.7913866666666667,
+    "zstd": 0.8209133333333334,
+    "brotli": 0.7470466666666666
+   },
+   {
+    "file": "code_python.py",
+    "o0": 4.663649229122495,
+    "o1": 3.496533464301341,
+    "o2": 2.4208347716829914,
+    "o3": 1.620202255039687,
+    "xz": 1.5640266666666667,
+    "zstd": 1.60028,
+    "brotli": 1.53336
+   },
+   {
+    "file": "data_xml.xml",
+    "o0": 5.351526981532356,
+    "o1": 3.050794124900779,
+    "o2": 1.5654748360772845,
+    "o3": 0.9031693354513636,
+    "xz": 0.8394133333333333,
+    "zstd": 0.9085333333333333,
+    "brotli": 0.8032333333333334
+   },
+   {
+    "file": "data_records.json",
+    "o0": 4.646062173008838,
+    "o1": 2.524391901912585,
+    "o2": 1.4219945090114432,
+    "o3": 1.1128700568729264,
+    "xz": 0.9142933333333333,
+    "zstd": 0.9232866666666667,
+    "brotli": 0.8927133333333334
+   },
+   {
+    "file": "data_records.csv",
+    "o0": 5.048756903414584,
+    "o1": 3.3983233762478924,
+    "o2": 2.3958096124416777,
+    "o3": 2.0701774002056763,
+    "xz": 2.27984,
+    "zstd": 2.3252866666666665,
+    "brotli": 2.234313333333333
+   }
+  ]
+ },
+ "file_count": 27
+}

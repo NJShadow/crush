@@ -1,0 +1,10 @@
+// Single-threaded stand-ins for the parts of <mutex> preflate names.
+// zig's libc++ for wasm32-wasi is built without thread support, and browsers
+// only allow WebAssembly threads on cross-origin-isolated pages, which a
+// self-extracting HTML file cannot rely on. preflate only spawns worker
+// threads when hardware_concurrency() > 1; with the value 1 reported below it
+// runs every task inline, in order (preflate_decoder.cpp / _reencoder.cpp,
+// "queueLimit == 0"), so these are never contended.
+#pragma once
+#include_next <mutex>
+#include "crush_nothreads.h"

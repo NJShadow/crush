@@ -1,0 +1,86 @@
+============================================================================================================
+CRUSH v4 DOMAIN CODECS - benchmark
+============================================================================================================
+
+### 1. Floating-point / numeric arrays
+
+
+field2d_f64  (5,040,000 B) - smooth 2-D field, float64 (constructed)
+  codec                             bytes   ratio  enc MB/s  dec MB/s  exact
+  xz -9e                        3,669,584    1.37       1.5            PASS  
+  zstd -19                      4,110,959    1.23       1.8            PASS  
+  brotli -q11                   3,752,635    1.34       0.4            PASS  
+  crush-num[lzma]               3,302,974    1.53       0.5      87.7  PASS  
+  v4-float[brotli]              3,274,064    1.54       0.4     230.2  PASS *
+
+field2d_be_f32  (2,520,000 B) - same field, BIG-endian float32 (constructed)
+  codec                             bytes   ratio  enc MB/s  dec MB/s  exact
+  xz -9e                        1,135,084    2.22       2.1            PASS  
+  zstd -19                      1,713,064    1.47       2.3            PASS  
+  brotli -q11                   1,331,832    1.89       0.3            PASS  
+  crush-num[lzma_d4]            1,033,283    2.44       0.2      38.3  PASS  
+  v4-float[brotli]                977,770    2.58       0.5      56.2  PASS *
+
+sensor_f32  (6,400,000 B) - 8-channel interleaved sensor stream, float32 (constructed)
+  codec                             bytes   ratio  enc MB/s  dec MB/s  exact
+  xz -9e                        3,737,100    1.71       1.8            PASS  
+  zstd -19                      5,302,881    1.21       2.8            PASS  
+  brotli -q11                   3,985,390    1.61       0.2            PASS  
+  crush-num[lzma]               3,511,281    1.82       0.2      30.8  PASS  
+  v4-float[brotli]              3,069,128    2.09       0.3      56.7  PASS *
+
+ticks_f64  (9,600,000 B) - financial ticks, decimal prices, float64 (constructed)
+  codec                             bytes   ratio  enc MB/s  dec MB/s  exact
+  xz -9e                          817,816   11.74       1.5            PASS  
+  zstd -19                      1,014,463    9.46       1.6            PASS  
+  brotli -q11                     934,599   10.27       0.4            PASS  
+  crush-num[lzma]                 817,754   11.74       0.2      99.8  PASS  
+  v4-float[brotli]                624,224   15.38       1.5     396.5  PASS *
+
+weights_f32  (8,000,000 B) - ML weight tensor, N(0,0.02), float32 (constructed)
+  codec                             bytes   ratio  enc MB/s  dec MB/s  exact
+  xz -9e                        7,369,836    1.09       2.4            PASS  
+  zstd -19                      7,407,476    1.08       4.4            PASS  
+  brotli -q11                   7,330,143    1.09       0.3            PASS  
+  crush-num[brotli]             6,678,332    1.20       0.4     153.4  PASS  
+  v4-float[brotli]              6,651,100    1.20       0.3      85.7  PASS *
+
+widened_f64  (5,600,000 B) - float32 values stored as float64 (constructed)
+  codec                             bytes   ratio  enc MB/s  dec MB/s  exact
+  xz -9e                        2,510,800    2.23       1.2            PASS  
+  zstd -19                      2,826,085    1.98       1.4            PASS  
+  brotli -q11                   2,644,854    2.12       0.3            PASS  
+  crush-num[brotli]             2,371,013    2.36       0.4     219.8  PASS  
+  v4-float[brotli]              2,334,215    2.40       0.6     128.8  PASS *
+
+edge_f64  (1,600,000 B) - NaN payloads / -0.0 / denormals / inf, float64
+  codec                             bytes   ratio  enc MB/s  dec MB/s  exact
+  xz -9e                        1,356,156    1.18       1.8            PASS  
+  zstd -19                      1,391,330    1.15       4.8            PASS  
+  brotli -q11                   1,349,597    1.19       0.3            PASS  
+  crush-num[brotli]             1,345,065    1.19       0.3      94.2  PASS *
+  v4-float[brotli]              1,345,093    1.19       0.3      58.7  PASS  
+
+edge_f32  (1,600,000 B) - NaN payloads / -0.0 / denormals / inf, float32
+  codec                             bytes   ratio  enc MB/s  dec MB/s  exact
+  xz -9e                        1,436,404    1.11       1.7            PASS  
+  zstd -19                      1,449,625    1.10       4.1            PASS  
+  brotli -q11                   1,428,759    1.12       0.3            PASS  
+  crush-num[brotli]             1,335,960    1.20       0.3      50.6  PASS *
+  v4-float[brotli]              1,337,204    1.20       0.3     169.0  PASS  
+
+data_floats  (7,200,000 B) - REAL corpus file: float64 random walk
+  codec                             bytes   ratio  enc MB/s  dec MB/s  exact
+  xz -9e                        5,576,656    1.29       2.1            PASS  
+  zstd -19                      6,253,728    1.15       3.5            PASS  
+  brotli -q11                   6,012,549    1.20       0.2            PASS  
+  crush-num[lzma]               5,182,010    1.39       0.6      86.3  PASS *
+  v4-float[lzma]                5,182,114    1.39       0.6      97.4  PASS  
+
+data_timeseries  (8,000,000 B) - REAL corpus file: int32 random walk
+  codec                             bytes   ratio  enc MB/s  dec MB/s  exact
+  xz -9e                        1,103,940    7.25       2.0            PASS  
+  zstd -19                      1,376,644    5.81       2.7            PASS  
+  brotli -q11                   1,260,586    6.35       0.7            PASS  
+  crush-num[zstd22]               718,879   11.13       0.9     351.0  PASS  
+  v4-float[zstd22]                717,711   11.15       1.0     295.8  PASS *

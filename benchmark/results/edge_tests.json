@@ -1,0 +1,38 @@
+[
+ {
+  "tier": "quick",
+  "harder": false,
+  "ok": true,
+  "in": 10109955,
+  "out": 3641925,
+  "sec": 0.26140904426574707,
+  "dedup": 5
+ },
+ {
+  "tier": "balanced",
+  "harder": false,
+  "ok": true,
+  "in": 10109955,
+  "out": 3612297,
+  "sec": 2.7436060905456543,
+  "dedup": 5
+ },
+ {
+  "tier": "crush",
+  "harder": false,
+  "ok": true,
+  "in": 10109955,
+  "out": 3612010,
+  "sec": 11.934508085250854,
+  "dedup": 5
+ },
+ {
+  "tier": "crush",
+  "harder": true,
+  "ok": true,
+  "in": 10109955,
+  "out": 3611974,
+  "sec": 10.817954063415527,
+  "dedup": 5
+ }
+]

@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Crush QR Receiver</title>
+<style>/*INLINE:src/style.css*/
+#video{width:100%;max-height:60vh}
+</style></head>
+<body><main>
+<h1>Receive a Crush archive from QR codes</h1>
+<p class="mut">Works with the animated QR stream (point the camera at the sender's screen) and with Crush paper backups (scan the pages with the camera, or open photos/scans of them). Codes can arrive in any order; missing ones are fine once enough have been read. The result is checked against its SHA-256 before it is offered. Nothing leaves this device.</p>
+<div class="card">
+  <button id="cam">Start camera</button><button id="stopcam" class="sec">Stop camera</button>
+  <label class="mut"><input type="checkbox" id="multi"> several codes per view (paper)</label>
+  <div style="margin-top:8px"><video id="video" muted playsinline></video></div>
+</div>
+<div class="card">
+  <div class="drop" id="drop">Drop photos or scans of a paper backup here, or <input type="file" id="files" accept="image/*" multiple></div>
+</div>
+<div class="card">
+  <div class="bar"><div id="bar"></div></div>
+  <div class="mut" id="stat">Waiting for codes.</div>
+  <div id="result"></div>
+</div>
+</main>
+<script>/*INLINE:src/core.js*/</script>
+<script>/*INLINE:vendor/jsQR.min.js*/</script>
+<script>/*INLINE:vendor/zxing-reader.iife.js*/</script>
+<script>/*INLINE:vendor/zxing_reader.wasm.b64.js*/</script>
+<script>/*INLINE:src/qrstream.js*/</script>
+<script>/*INLINE:src/ui.js*/</script>
+<script>
+(function () {
+  var CC = CrushChannels, $ = function (i) { return document.getElementById(i); };
+  var rx = new CC.core.Receiver(), cam = null, t0 = null, done = false;
+  CC.receiver = rx;
+  function update() {
+    var p = rx.progress(), s = rx.stats;
+    $('bar').style.width = (100 * (rx.result ? 1 : p)).toFixed(1) + '%';
+    var txt = s.useful + ' useful packets, ' + s.dup + ' duplicates' + (s.bad ? ', ' + s.bad + ' rejected' : '') + (s.foreign ? ', ' + s.foreign + ' from another archive' : '');
+    if (rx.p) txt += ' - ' + (rx.p.kind === CC.core.KIND_RS ? 'paper backup' : 'stream') + ', ' + CC.ui.fmt(rx.p.L) + ', ' + (100 * p).toFixed(0) + '%';
+    if (cam) txt += ' - ' + cam.stats.engine + ' ' + (cam.stats.frames ? (cam.stats.ms / cam.stats.frames).toFixed(0) + ' ms/frame' : '');
+    if (rx.error) txt += ' - ' + rx.error;
+    $('stat').textContent = txt;
+  }
+  function onStrings(strs) {
+    if (done) return;
+    if (t0 === null) t0 = performance.now();
+    CC.feedStrings(rx, strs);
+    update();
+    if (rx.result && !done) {
+      done = true;
+      if (cam) cam.stop();
+      var secs = (performance.now() - t0) / 1000;
+      CC.ui.showResult($('result'), rx.result, rx.sha256, rx.p.kind === CC.core.KIND_RS ? 'paper' : 'qr-stream',
+        'Completed ' + secs.toFixed(1) + ' s after the first code (' + (rx.result.length / Math.max(secs, 0.001)).toFixed(0) + ' B/s).');
+    }
+  }
+  CC.feedQRStrings = onStrings;   // test hook / host hook
+  $('cam').onclick = function () {
+    if (cam) cam.stop();
+    cam = new CC.scan.Camera($('video'), onStrings, { multi: $('multi').checked });
+    cam.start().catch(function (e) { $('stat').textContent = 'Camera unavailable: ' + e.message; });
+    setInterval(update, 500);
+  };
+  $('stopcam').onclick = function () { if (cam) cam.stop(); };
+  function images(files) {
+    var list = Array.prototype.slice.call(files), i = 0;
+    function next() {
+      if (i >= list.length || done) return;
+      var f = list[i++];
+      $('stat').textContent = 'Reading ' + f.name + ' (' + i + '/' + list.length + ')';
+      createImageBitmap(f).then(function (bm) {
+        var s = Math.min(1, 2600 / Math.max(bm.width, bm.height));
+        var c = document.createElement('canvas'); c.width = Math.round(bm.width * s); c.height = Math.round(bm.height * s);
+        var ctx = c.getContext('2d', { willReadFrequently: true }); ctx.drawImage(bm, 0, 0, c.width, c.height);
+        return CC.scan.decodeImageData(ctx.getImageData(0, 0, c.width, c.height), { multi: true, source: c, fallback: true });
+      }).then(function (strs) { onStrings(strs); }, function (e) { $('stat').textContent = f.name + ': ' + e.message; }).then(function () { setTimeout(next, 0); });
+    }
+    next();
+  }
+  $('files').onchange = function () { images(this.files); };
+  var dz = $('drop');
+  dz.ondragover = function (e) { e.preventDefault(); };
+  dz.ondrop = function (e) { e.preventDefault(); images(e.dataTransfer.files); };
+})();
+</script>
+</body></html>

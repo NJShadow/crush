@@ -1,0 +1,52 @@
+==============================================================================
+PART 1 - ORACLE must not hallucinate a generator
+==============================================================================
+  arithmetic that breaks on the LAST value       correctly found no program
+  arithmetic with one corrupted value mid-way    correctly found no program
+  Fibonacci with one flipped bit                 correctly found no program
+  periodic except for the final block            correctly found no program
+  almost-constant (one byte differs)             correctly found no program
+  real text                                      correctly found no program
+  random                                         correctly found no program
+
+  wrong programs: 0
+
+==============================================================================
+PART 2 - PRISM must reassemble byte-for-byte, however ugly the input
+==============================================================================
+  JSON, compact, no whitespace                 split, exact=True   JSON shredded into 2 value columns
+  JSON, pretty, 4-space indent                 split, exact=True   JSON shredded into 3 value columns
+  JSON with unicode escapes                    split, exact=True   JSON shredded into 2 value columns
+  JSON with escaped quotes/backslashes         split, exact=True   JSON shredded into 2 value columns
+  JSON deeply nested                           split, exact=True   JSON shredded into 1 value columns
+  JSON, trailing whitespace + newline          split, exact=True   JSON shredded into 1 value columns
+  CSV with CRLF line endings                   split, exact=True   delimited text shredded into 4 columns
+  CSV with ragged rows                         split, exact=True   delimited text shredded into 4 columns
+  CSV with empty fields                        split, exact=True   delimited text shredded into 5 columns
+  CSV with quoted commas inside fields         split, exact=True   delimited text shredded into 6 columns
+  CSV, no trailing newline                     split, exact=True   delimited text shredded into 3 columns
+  CSV with a UTF-8 BOM                         split, exact=True   delimited text shredded into 3 columns
+  CSV with zero-padded numeric column          split, exact=True   delimited text shredded into 3 columns
+  CSV with huge integers                       split, exact=True   delimited text shredded into 3 columns
+  CSV with negative + leading-zero mix         split, exact=True   delimited text shredded into 3 columns
+  log lines with embedded tabs                 split, exact=True   delimited text shredded into 4 columns
+  XML with CDATA and comments                  split, exact=True   markup split into tag and text streams
+  truncated JSON                               split, exact=True   JSON shredded into 1 value columns
+  JSON with NaN-ish tokens (invalid)           declined
+  binary that looks delimited                  split, exact=True   markup split into tag and text streams
+
+  reassembly failures: 0
+
+==============================================================================
+PART 3 - full archive roundtrip over everything above
+==============================================================================
+  41 files, 18,532,297 bytes
+
+  quick                       18,532,297 -> 2,544,422 (13.73%)   15.8s   ALL BYTE-EXACT
+  balanced                    18,532,297 -> 2,458,241 (13.26%)   22.1s   ALL BYTE-EXACT
+  crush+harder                18,532,297 -> 2,440,030 (13.17%)   37.1s   ALL BYTE-EXACT
+  singularity+harder          18,532,297 -> 2,261,030 (12.20%)  396.1s   ALL BYTE-EXACT
+  crush+harder+perceptual     18,532,297 -> 2,440,032 (13.17%)   38.3s   ALL BYTE-EXACT
+
+  5/5 configurations fully byte-exact
+  Oracle wrong programs: 0   Prism reassembly failures: 0

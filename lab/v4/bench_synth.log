@@ -1,0 +1,22 @@
+  synth_records_be.bin                3,360,000  base    730,622  loom    611,518  +16.30%  PASS    1.3MB/s  S=24 f=12
+  synth_sensor_log.bin                7,200,100  base  2,845,839  loom  2,476,390  +12.98%  PASS    2.2MB/s  S=40 f=14 [0:7200080]
+  synth_tensor_f32.bin                2,654,337  base    174,296  loom    174,484   -0.11%  PASS    0.9MB/s  S=4 f=4 [0:2654336]
+  synth_vlen_records.bin              2,769,846  base    417,019  loom    417,029   -0.00%  PASS    1.4MB/s  (fallback) plain
+
+=== SYNTH FILES ==========================================================================
+file                                    bytes     xz -9e   zstd -19     brotli   BT+tourn       LOOM  vs best      
+------------------------------------------------------------------------------------------------------------------
+synth_records_be.bin                3,360,000    796,864  1,139,358  1,003,097    730,622    611,518   16.30%  PASS
+synth_sensor_log.bin                7,200,100  3,426,704  4,395,530  3,652,290  2,845,839  2,476,390   12.98%  PASS
+synth_tensor_f32.bin                2,654,337    182,324    185,452    181,884    174,296    174,484   -0.11%  PASS
+synth_vlen_records.bin              2,769,846    417,080    473,574    438,006    417,019    417,029   -0.00%  PASS
+------------------------------------------------------------------------------------------------------------------
+TOTAL                              15,984,283  4,822,972  6,193,914  5,275,277  4,167,776  3,679,421   11.72%
+
+file                              plan                        BT        analysis    encode
+synth_records_be.bin              S=24 f=12                   w8          1.3MB/s     15.7s
+synth_sensor_log.bin              S=40 f=14 [0:7200080]       w8          2.2MB/s     35.7s
+synth_tensor_f32.bin              S=4 f=4 [0:2654336]         w4          0.9MB/s      5.2s
+synth_vlen_records.bin            (fallback) plain            none        1.4MB/s     11.3s
+
+round-trip: 4/4 PASS

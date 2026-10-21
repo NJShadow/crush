@@ -1,0 +1,2 @@
+text_english.txt        150,000  ref   25,816  lstm   25,640   -0.68%    0.035 ->  0.005 MB/s   roundtrip ok - repeat ok - O0==O2 ok
+binary_linux_elf        150,000  ref   44,699  lstm   43,349   -3.02%    0.044 ->  0.007 MB/s   roundtrip ok - repeat ok - O0==O2 ok

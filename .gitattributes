@@ -1,0 +1,12 @@
+# Windows launchers must keep CRLF line endings: cmd.exe mis-handles labels
+# (goto) in LF-only batch files.
+*.bat text eol=crlf
+# Binaries and format-defining data: never touched by line-ending conversion.
+*.exe binary
+*.dll binary
+*.wasm binary
+*.prime binary
+*.zdict binary
+*.cnn binary
+*.crush binary
+*.tar.xz binary

@@ -1,0 +1,12 @@
+  data_floats.bin                     7,200,000  base  5,182,010  loom  5,173,412   +0.17%  PASS    2.9MB/s  S=8 f=4
+  data_timeseries.bin                 8,000,000  base    718,879  loom    719,024   -0.02%  PASS    4.5MB/s  S=4 f=1
+  image_raw16.bin                     2,880,000  base  2,098,484  loom  2,098,641   -0.01%  PASS    1.6MB/s  S=2 f=2
+  data_database.sqlite                7,135,232  base  2,286,942  loom  2,286,952   -0.00%  PASS    3.2MB/s  (fallback) plain
+  font.ttf                               84,492  base     35,393  loom     35,403   -0.03%  PASS    0.2MB/s  (fallback) plain
+  binary_win_x64.pyd                  3,703,296  base    919,737  loom    919,747   -0.00%  PASS    2.6MB/s  (fallback) plain
+  auto_increment_ids.bin              6,000,000  base         21  loom        161  -666.67%  PASS    2.5MB/s  S=4 f=1
+  event_timestamps.bin                6,400,000  base         52  loom        193  -271.15%  PASS    2.5MB/s  S=8 f=1
+  prng_stream.bin                     3,200,000  base  2,465,858  loom  2,017,528  +18.18%  PASS    1.0MB/s  S=4096 f=2104 [0:3198976]
+  repeated_block.bin                  2,457,600  base      2,078  loom      2,088   -0.48%  PASS    0.7MB/s  (fallback) plain
+  zero_padding.bin                    3,000,000  base         14  loom         24  -71.43%  PASS    3.3MB/s  (fallback) plain
+  accounts.csv                       13,652,664  base  1,235,130  loom  1,235,140   -0.00%  PASS    2.1MB/s  (fallback) plain

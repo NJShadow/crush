@@ -1,0 +1,10 @@
+collecting…
+test:  20 files, 97,521 B  (median 4,828 B)
+prior pool: 1529 files, 22.1 MB (disjoint by content hash and filename)
+
+ shipped knowledge       bytes  of original     vs xz      sec
+------------------------------------------------------------------
+     xz -9e (none)      30,960       31.75%         —
+    none (crushcm)      25,219       25.86%    -18.5%    14.6
+              1 MB      16,757       17.18%    -45.9%   263.0
+              2 MB      16,011       16.42%    -48.3%   614.8

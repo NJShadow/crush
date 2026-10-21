@@ -1,0 +1,1639 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Crush QR Stream</title>
+<style>:root{--bg:#f7f7f5;--fg:#1d1d1b;--mut:#6b6b66;--card:#fff;--line:#deded8;--acc:#2456c7;--ok:#17803d;--bad:#b42318}
+@media (prefers-color-scheme:dark){:root{--bg:#141413;--fg:#ecebe6;--mut:#a3a29c;--card:#1e1e1c;--line:#34342f;--acc:#7aa2ff;--ok:#4cc27a;--bad:#ff6b5e}}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.45 system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
+main{max-width:860px;margin:0 auto;padding:16px}h1{font-size:20px;margin:8px 0 4px}p{margin:6px 0}.mut{color:var(--mut);font-size:13px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:14px;margin:12px 0}
+.cc-btn,button{font:inherit;padding:8px 14px;border-radius:8px;border:1px solid var(--acc);background:var(--acc);color:#fff;cursor:pointer;margin:4px 6px 4px 0}
+button.sec{background:transparent;color:var(--acc)}
+.bar{height:10px;background:var(--line);border-radius:5px;overflow:hidden}.bar>div{height:100%;width:0;background:var(--acc);transition:width .2s}
+.cc-ok{color:var(--ok);font-weight:600}.cc-err{color:var(--bad);font-weight:600}.cc-hash{font:12px ui-monospace,Consolas,monospace;word-break:break-all;color:var(--mut);margin:4px 0}
+video,canvas.view{max-width:100%;border-radius:8px;background:#000}
+label{margin-right:12px}select,input[type=number]{font:inherit;padding:3px}
+.drop{border:2px dashed var(--line);border-radius:10px;padding:18px;text-align:center;color:var(--mut)}
+
+#stage{background:#fff;display:flex;justify-content:center;padding:12px;border-radius:10px}
+#qr{image-rendering:pixelated;width:min(92vw,78vh);height:min(92vw,78vh)}
+body.full main>*:not(#stagewrap){display:none}body.full #qr{width:min(98vw,96vh);height:min(98vw,96vh)}body.full main{max-width:none}
+</style></head>
+<body><main>
+<h1>Send a Crush archive as a QR stream</h1>
+<p class="mut">Point the receiving device's camera at the codes below (open the Crush QR receiver page there). The codes never repeat a useful packet: the receiver can start at any moment, miss any frames, and still finishes as soon as it has caught enough of them. Everything runs in this page; nothing is uploaded.</p>
+<div class="card" id="pick">
+  <div class="drop" id="drop">Drop a .crush file here, or <input type="file" id="file"></div>
+</div>
+<div class="card">
+  <label>QR version <select id="ver"><option>10</option><option>15</option><option selected>20</option><option>25</option><option>30</option></select></label>
+  <label>Error correction <select id="ecl"><option value="l" selected>L (7%)</option><option value="m">M (15%)</option></select></label>
+  <label>Codes per second <input id="rate" type="number" min="1" max="30" value="8" style="width:4em"></label>
+  <div class="mut" id="info">No file loaded.</div>
+  <button id="go" disabled>Start</button><button id="stop" class="sec">Stop</button><button id="full" class="sec">Full screen</button>
+</div>
+<div id="stagewrap"><div id="stage"><canvas id="qr" class="view" width="1" height="1"></canvas></div>
+<div class="mut" id="ctr"></div></div>
+</main>
+<script>/* crushchan core.js - packet format, GF(2) fountain, Reed-Solomon GF(256),
+ * SHA-256, CRC-32, Base45, base64url.  Integer-only; mirrors py/crushchan/core.py
+ * exactly (cross-checked by tests/test_core_cross.py).
+ * Exposes globalThis.CrushChannels.core (and module.exports under node).
+ * No network, no dependencies. */
+(function (root) {
+  'use strict';
+  var MAGIC = 0xC5, KIND_FOUNTAIN = 0x11, KIND_RS = 0x12, HDR = 18, TRL = 4;
+  var KMAX_FOUNTAIN = 1024, MAX_L = 1 << 28, MIN_T = 8, MAX_T = 8192, MAX_SYMBOLS = 1 << 20;
+
+  /* ------------------------------------------------------------ SHA-256 */
+  var K256 = new Uint32Array([
+    0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5,
+    0xd807aa98, 0x12835b01, 0x243185be, 0x550c7dc3, 0x72be5d74, 0x80deb1fe, 0x9bdc06a7, 0xc19bf174,
+    0xe49b69c1, 0xefbe4786, 0x0fc19dc6, 0x240ca1cc, 0x2de92c6f, 0x4a7484aa, 0x5cb0a9dc, 0x76f988da,
+    0x983e5152, 0xa831c66d, 0xb00327c8, 0xbf597fc7, 0xc6e00bf3, 0xd5a79147, 0x06ca6351, 0x14292967,
+    0x27b70a85, 0x2e1b2138, 0x4d2c6dfc, 0x53380d13, 0x650a7354, 0x766a0abb, 0x81c2c92e, 0x92722c85,
+    0xa2bfe8a1, 0xa81a664b, 0xc24b8b70, 0xc76c51a3, 0xd192e819, 0xd6990624, 0xf40e3585, 0x106aa070,
+    0x19a4c116, 0x1e376c08, 0x2748774c, 0x34b0bcb5, 0x391c0cb3, 0x4ed8aa4a, 0x5b9cca4f, 0x682e6ff3,
+    0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208, 0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2]);
+  function sha256(msg) {
+    var len = msg.length, nb = ((len + 9 + 63) >> 6) << 6;
+    var m = new Uint8Array(nb); m.set(msg); m[len] = 0x80;
+    var bits = len * 8; // < 2^53
+    var hi = Math.floor(bits / 4294967296), lo = bits >>> 0;
+    m[nb - 8] = hi >>> 24; m[nb - 7] = hi >>> 16; m[nb - 6] = hi >>> 8; m[nb - 5] = hi;
+    m[nb - 4] = lo >>> 24; m[nb - 3] = lo >>> 16; m[nb - 2] = lo >>> 8; m[nb - 1] = lo;
+    var h = new Uint32Array([0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a, 0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19]);
+    var w = new Uint32Array(64);
+    for (var off = 0; off < nb; off += 64) {
+      for (var i = 0; i < 16; i++) { var o = off + i * 4; w[i] = (m[o] << 24) | (m[o + 1] << 16) | (m[o + 2] << 8) | m[o + 3]; }
+      for (i = 16; i < 64; i++) {
+        var a0 = w[i - 15], a1 = w[i - 2];
+        var s0 = ((a0 >>> 7) | (a0 << 25)) ^ ((a0 >>> 18) | (a0 << 14)) ^ (a0 >>> 3);
+        var s1 = ((a1 >>> 17) | (a1 << 15)) ^ ((a1 >>> 19) | (a1 << 13)) ^ (a1 >>> 10);
+        w[i] = (w[i - 16] + s0 + w[i - 7] + s1) | 0;
+      }
+      var a = h[0], b = h[1], c = h[2], d = h[3], e = h[4], f = h[5], g = h[6], hh = h[7];
+      for (i = 0; i < 64; i++) {
+        var S1 = ((e >>> 6) | (e << 26)) ^ ((e >>> 11) | (e << 21)) ^ ((e >>> 25) | (e << 7));
+        var ch = (e & f) ^ (~e & g);
+        var t1 = (hh + S1 + ch + K256[i] + w[i]) | 0;
+        var S0 = ((a >>> 2) | (a << 30)) ^ ((a >>> 13) | (a << 19)) ^ ((a >>> 22) | (a << 10));
+        var mj = (a & b) ^ (a & c) ^ (b & c);
+        var t2 = (S0 + mj) | 0;
+        hh = g; g = f; f = e; e = (d + t1) | 0; d = c; c = b; b = a; a = (t1 + t2) | 0;
+      }
+      h[0] += a; h[1] += b; h[2] += c; h[3] += d; h[4] += e; h[5] += f; h[6] += g; h[7] += hh;
+    }
+    var out = new Uint8Array(32);
+    for (i = 0; i < 8; i++) { out[i * 4] = h[i] >>> 24; out[i * 4 + 1] = h[i] >>> 16; out[i * 4 + 2] = h[i] >>> 8; out[i * 4 + 3] = h[i]; }
+    return out;
+  }
+  function hex(b) { var s = ''; for (var i = 0; i < b.length; i++) s += (b[i] < 16 ? '0' : '') + b[i].toString(16); return s; }
+
+  /* ------------------------------------------------------------ CRC-32 */
+  var CRC_T = new Uint32Array(256);
+  for (var n = 0; n < 256; n++) { var c = n; for (var k = 0; k < 8; k++) c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1; CRC_T[n] = c >>> 0; }
+  function crc32(b, start, end) {
+    var c = 0xFFFFFFFF; start = start || 0; end = end === undefined ? b.length : end;
+    for (var i = start; i < end; i++) c = CRC_T[(c ^ b[i]) & 255] ^ (c >>> 8);
+    return (c ^ 0xFFFFFFFF) >>> 0;
+  }
+
+  /* ------------------------------------------------------------ PRNG */
+  function mix32(x) {
+    x = x >>> 0;
+    x ^= x >>> 16; x = Math.imul(x, 0x7FEB352D) >>> 0;
+    x ^= x >>> 15; x = Math.imul(x, 0x846CA68B) >>> 0;
+    x ^= x >>> 16; return x >>> 0;
+  }
+  function rowSeed(session, block, esi) {
+    var s = mix32((session ^ mix32((Math.imul(block, 0x85EBCA6B) + 0x632BE5AB) >>> 0)) >>> 0);
+    s = mix32((s + (Math.imul(esi >>> 0, 0x9E3779B9) >>> 0)) >>> 0);
+    return s || 0x6D2B79F5;
+  }
+  /* coefficient bitset for one ESI, as Uint32Array of ceil(kb/32) words (bit j = symbol j) */
+  function fountainRow(session, block, esi, kb) {
+    var nw = (kb + 31) >>> 5, v = new Uint32Array(nw);
+    if (esi < kb) { v[esi >>> 5] = (1 << (esi & 31)) >>> 0; return v; }
+    var seed = rowSeed(session, block, esi), any = 0;
+    for (var i = 0; i < nw; i++) { v[i] = mix32((seed + Math.imul(i, 0x9E3779B9)) >>> 0); }
+    if (kb & 31) v[nw - 1] &= ((1 << (kb & 31)) - 1) >>> 0;
+    for (i = 0; i < nw; i++) any |= v[i];
+    if (!any) { var j = esi % kb; v[j >>> 5] = (1 << (j & 31)) >>> 0; }
+    return v;
+  }
+
+  /* ------------------------------------------------------------ layout & packets */
+  function layout(L, T, kind, Krs) {
+    var ktot = Math.floor((L + 32 + T - 1) / T), B, kb;
+    if (kind === KIND_RS) { kb = Krs; B = Math.floor((ktot + kb - 1) / kb); }
+    else { B = Math.floor((ktot + KMAX_FOUNTAIN - 1) / KMAX_FOUNTAIN); kb = Math.floor((ktot + B - 1) / B); }
+    return { ktot: ktot, B: B, kb: kb };
+  }
+  function rd32(b, o) { return ((b[o] << 24) | (b[o + 1] << 16) | (b[o + 2] << 8) | b[o + 3]) >>> 0; }
+  function rd16(b, o) { return (b[o] << 8) | b[o + 1]; }
+  function wr32(b, o, v) { b[o] = v >>> 24; b[o + 1] = v >>> 16; b[o + 2] = v >>> 8; b[o + 3] = v; }
+  function wr16(b, o, v) { b[o] = v >>> 8; b[o + 1] = v; }
+
+  function parse(p) {
+    if (!p || p.length < HDR + TRL + MIN_T || p[0] !== MAGIC) return null;
+    var kind = p[1];
+    if (kind !== KIND_FOUNTAIN && kind !== KIND_RS) return null;
+    var session = rd32(p, 2), L = rd32(p, 6), T = rd16(p, 10);
+    if (T < MIN_T || T > MAX_T || L > MAX_L || p.length !== HDR + TRL + T || Math.floor((L + 32 + T - 1) / T) > MAX_SYMBOLS) return null;
+    if (rd32(p, p.length - 4) !== crc32(p, 0, p.length - 4)) return null;
+    var d = { kind: kind, session: session, L: L, T: T, payload: p.subarray(HDR, HDR + T) }, lay;
+    if (kind === KIND_FOUNTAIN) {
+      d.block = rd16(p, 12); d.esi = rd32(p, 14);
+      lay = layout(L, T, kind);
+      if (d.block >= lay.B) return null;
+    } else {
+      d.K = p[12]; d.N = p[13]; d.block = rd16(p, 14); d.esi = rd16(p, 16);
+      if (d.K < 1 || d.N < d.K || d.esi >= d.N) return null;
+      lay = layout(L, T, kind, d.K);
+      if (d.block >= lay.B) return null;
+    }
+    d.B = lay.B; d.kb = lay.kb; d.ktot = lay.ktot;
+    return d;
+  }
+  function pack(kind, session, L, T, f12, f14, payload) {
+    var p = new Uint8Array(HDR + T + TRL);
+    p[0] = MAGIC; p[1] = kind; wr32(p, 2, session); wr32(p, 6, L); wr16(p, 10, T);
+    p.set(f12, 12); p.set(f14, 14); p.set(payload, HDR);
+    wr32(p, HDR + T, crc32(p, 0, HDR + T));
+    return p;
+  }
+
+  /* ------------------------------------------------------------ fountain encoder */
+  function FountainEncoder(data, T) {
+    if (!(T >= MIN_T && T <= MAX_T)) throw new Error('bad T');
+    var hash = sha256(data), L = data.length, lay = layout(L, T, KIND_FOUNTAIN);
+    var src = new Uint8Array(lay.B * lay.kb * T); src.set(data); src.set(hash, L);
+    this.data = data; this.T = T; this.L = L; this.B = lay.B; this.kb = lay.kb; this.ktot = lay.ktot;
+    this.session = rd32(hash, 0); this.src = src; this.hash = hash;
+  }
+  FountainEncoder.prototype.packet = function (block, esi) {
+    var T = this.T, kb = this.kb, row = fountainRow(this.session, block, esi, kb);
+    var out = new Uint8Array(T), base = block * kb * T, src = this.src;
+    for (var w = 0; w < row.length; w++) {
+      var x = row[w];
+      while (x) {
+        var t = x & -x, j = (w << 5) + (31 - Math.clz32(t));
+        var o = base + j * T;
+        for (var i = 0; i < T; i++) out[i] ^= src[o + i];
+        x = (x ^ t) >>> 0;
+      }
+    }
+    var f12 = new Uint8Array(2), f14 = new Uint8Array(4);
+    wr16(f12, 0, block); wr32(f14, 0, esi);
+    return pack(KIND_FOUNTAIN, this.session, this.L, T, f12, f14, out);
+  };
+  /* n-th packet of the endless schedule: source symbols first, then repair, round-robin over blocks */
+  FountainEncoder.prototype.nth = function (n) {
+    return this.packet(n % this.B, Math.floor(n / this.B));
+  };
+
+  /* ------------------------------------------------------------ fountain decoder (online GF(2) elimination) */
+  function FountainBlockDecoder(session, block, kb, real, T) {
+    this.session = session; this.block = block; this.kb = kb; this.T = T;
+    this.nw = (kb + 31) >>> 5; this.pw = (T + 3) >>> 2;
+    this.pivC = new Array(kb); this.pivV = new Array(kb); this.rank = 0;
+    for (var j = real; j < kb; j++) { var c = new Uint32Array(this.nw); c[j >>> 5] = (1 << (j & 31)) >>> 0; this._add(c, new Uint32Array(this.pw)); }
+  }
+  FountainBlockDecoder.prototype._add = function (c, v) {
+    var nw = this.nw, pw = this.pw, w = 0;
+    for (;;) {
+      while (w < nw && c[w] === 0) w++;
+      if (w === nw) return false;
+      var b = (w << 5) + (31 - Math.clz32(c[w] & -c[w]));
+      var pc = this.pivC[b];
+      if (!pc) { this.pivC[b] = c; this.pivV[b] = v; this.rank++; return true; }
+      var pv = this.pivV[b], i;
+      for (i = w; i < nw; i++) c[i] ^= pc[i];
+      for (i = 0; i < pw; i++) v[i] ^= pv[i];
+    }
+  };
+  FountainBlockDecoder.prototype.add = function (esi, payload) {
+    if (this.rank === this.kb) return false;
+    var v = new Uint32Array(this.pw), v8 = new Uint8Array(v.buffer); v8.set(payload);
+    return this._add(fountainRow(this.session, this.block, esi, this.kb), v);
+  };
+  FountainBlockDecoder.prototype.done = function () { return this.rank === this.kb; };
+  FountainBlockDecoder.prototype.solve = function () {
+    var kb = this.kb, nw = this.nw, pw = this.pw, sol = new Array(kb);
+    for (var b = kb - 1; b >= 0; b--) {
+      var c = this.pivC[b], v = this.pivV[b];
+      c[b >>> 5] ^= (1 << (b & 31)) >>> 0;
+      for (var w = b >>> 5; w < nw; w++) {
+        var x = c[w];
+        while (x) {
+          var t = x & -x, j = (w << 5) + (31 - Math.clz32(t)), s = sol[j];
+          for (var i = 0; i < pw; i++) v[i] ^= s[i];
+          x = (x ^ t) >>> 0;
+        }
+      }
+      sol[b] = v;
+    }
+    var out = new Uint8Array(kb * this.T);
+    for (b = 0; b < kb; b++) out.set(new Uint8Array(sol[b].buffer, 0, this.T), b * this.T);
+    return out;
+  };
+
+  /* ------------------------------------------------------------ Reed-Solomon GF(256), systematic Cauchy */
+  var GF_EXP = new Uint8Array(512), GF_LOG = new Uint8Array(256);
+  (function () { var x = 1; for (var i = 0; i < 255; i++) { GF_EXP[i] = x; GF_LOG[x] = i; x <<= 1; if (x & 0x100) x ^= 0x11D; } for (i = 255; i < 512; i++) GF_EXP[i] = GF_EXP[i - 255]; })();
+  function gmul(a, b) { return (a === 0 || b === 0) ? 0 : GF_EXP[GF_LOG[a] + GF_LOG[b]]; }
+  function ginv(a) { return GF_EXP[255 - GF_LOG[a]]; }
+  function rsCoef(K, i, j) { return i < K ? (i === j ? 1 : 0) : ginv(i ^ j); }
+  function mulTable(c) { var t = new Uint8Array(256); for (var v = 0; v < 256; v++) t[v] = gmul(c, v); return t; }
+
+  function rsEncode(data, T, K, N) {
+    if (!(K >= 1 && K <= N && N <= 255)) throw new Error('bad K/N');
+    var hash = sha256(data), L = data.length, lay = layout(L, T, KIND_RS, K), session = rd32(hash, 0);
+    var src = new Uint8Array(lay.B * K * T); src.set(data); src.set(hash, L);
+    var out = [];
+    for (var b = 0; b < lay.B; b++) {
+      for (var i = 0; i < N; i++) {
+        var sh;
+        if (i < K) sh = src.subarray((b * K + i) * T, (b * K + i + 1) * T);
+        else {
+          sh = new Uint8Array(T);
+          for (var j = 0; j < K; j++) {
+            var t = mulTable(rsCoef(K, i, j)), o = (b * K + j) * T;
+            for (var q = 0; q < T; q++) sh[q] ^= t[src[o + q]];
+          }
+        }
+        var f14 = new Uint8Array(4); wr16(f14, 0, b); wr16(f14, 2, i);
+        out.push(pack(KIND_RS, session, L, T, new Uint8Array([K, N]), f14, sh));
+      }
+    }
+    return out;
+  }
+  function RSBlockDecoder(K, N, real) {
+    this.K = K; this.N = N; this.kb = K; this.real = real; this.zeros = K - real; this.shards = {}; this.count = 0;
+  }
+  Object.defineProperty(RSBlockDecoder.prototype, 'rank', { get: function () { return Math.min(this.K, this.count + this.zeros); } });
+  RSBlockDecoder.prototype.done = function () { return this.count + this.zeros >= this.K; };
+  RSBlockDecoder.prototype.add = function (idx, payload) {
+    if (this.shards[idx] || this.done() || (idx >= this.real && idx < this.K)) return false;
+    this.shards[idx] = new Uint8Array(payload); this.count++; return true;
+  };
+  RSBlockDecoder.prototype.solve = function (T) {
+    var K = this.K, rows = [], vals = [], j, r, c;
+    for (j = this.real; j < K; j++) { r = new Uint8Array(K); r[j] = 1; rows.push(r); vals.push(new Uint8Array(T)); }
+    var keys = Object.keys(this.shards).map(Number).sort(function (a, b) { return a - b; });
+    for (var q = 0; q < keys.length && rows.length < K; q++) {
+      r = new Uint8Array(K); for (c = 0; c < K; c++) r[c] = rsCoef(K, keys[q], c);
+      rows.push(r); vals.push(new Uint8Array(this.shards[keys[q]]));
+    }
+    for (var col = 0; col < K; col++) {
+      var pr = col; while (pr < K && rows[pr][col] === 0) pr++;
+      if (pr === K) throw new Error('RS singular (cannot happen for MDS)');
+      var tr = rows[col]; rows[col] = rows[pr]; rows[pr] = tr; var tv = vals[col]; vals[col] = vals[pr]; vals[pr] = tv;
+      var inv = ginv(rows[col][col]);
+      if (inv !== 1) { var ti = mulTable(inv); for (c = 0; c < K; c++) rows[col][c] = ti[rows[col][c]]; for (c = 0; c < T; c++) vals[col][c] = ti[vals[col][c]]; }
+      for (r = 0; r < K; r++) {
+        var f = rows[r][col];
+        if (r === col || !f) continue;
+        var tf = mulTable(f), rc = rows[col], rr = rows[r], vc = vals[col], vr = vals[r];
+        for (c = 0; c < K; c++) rr[c] ^= tf[rc[c]];
+        for (c = 0; c < T; c++) vr[c] ^= tf[vc[c]];
+      }
+    }
+    var out = new Uint8Array(K * T);
+    for (r = 0; r < K; r++) out.set(vals[r], r * T);
+    return out;
+  };
+
+  /* ------------------------------------------------------------ channel-agnostic receiver */
+  function Receiver() {
+    this.p = null; this.blocks = null; this.result = null; this.error = null;
+    this.stats = { packets: 0, bad: 0, foreign: 0, dup: 0, useful: 0 };
+  }
+  /* returns true when complete. Throws never; sets .error on hash mismatch. */
+  Receiver.prototype.feed = function (pkt) {
+    if (this.result) return true;
+    this.stats.packets++;
+    var d = parse(pkt);
+    if (!d) { this.stats.bad++; return false; }
+    if (!this.p) {
+      this.p = { kind: d.kind, session: d.session, L: d.L, T: d.T, B: d.B, kb: d.kb, N: d.N, ktot: d.ktot };
+      this.p.K = d.K;
+      this.blocks = new Array(d.B);   // created lazily: a hostile header cannot force big allocations
+      this.nblocks = 0;
+    } else if (d.kind !== this.p.kind || d.session !== this.p.session || d.L !== this.p.L || d.T !== this.p.T || (d.kind === KIND_RS && (d.N !== this.p.N || d.kb !== this.p.kb))) {
+      this.stats.foreign++; return false;
+    }
+    var blk = this.blocks[d.block];
+    if (!blk) {
+      var real = Math.max(0, Math.min(d.kb, this.p.ktot - d.block * d.kb));
+      blk = this.blocks[d.block] = d.kind === KIND_FOUNTAIN ? new FountainBlockDecoder(d.session, d.block, d.kb, real, d.T) : new RSBlockDecoder(d.K, d.N, real);
+      this.nblocks++;
+    }
+    if (blk.add(d.esi, d.payload)) this.stats.useful++; else this.stats.dup++;
+    if (this.nblocks < this.p.B) return false;
+    for (var i = 0; i < this.blocks.length; i++) if (!this.blocks[i].done()) return false;
+    var T = this.p.T, L = this.p.L, all = new Uint8Array(this.p.B * this.p.kb * T);
+    for (i = 0; i < this.blocks.length; i++) all.set(this.blocks[i].solve(T), i * this.p.kb * T);
+    var data = all.slice(0, L), h = all.subarray(L, L + 32), h2 = sha256(data);
+    for (i = 0; i < 32; i++) if (h[i] !== h2[i]) { this.error = 'SHA-256 mismatch: output refused'; this.reset(); return false; }
+    if (rd32(h, 0) !== this.p.session) { this.error = 'session mismatch'; this.reset(); return false; }
+    this.result = data; this.sha256 = hex(h2); return true;
+  };
+  Receiver.prototype.reset = function () { this.p = null; this.blocks = null; };
+  Receiver.prototype.progress = function () {
+    if (!this.blocks) return 0; var a = 0, t = 0;
+    for (var i = 0; i < this.blocks.length; i++) if (this.blocks[i]) a += Math.min(this.blocks[i].rank, this.blocks[i].kb);
+    return a / (this.p.B * this.p.kb);
+  };
+
+  /* ------------------------------------------------------------ text encodings */
+  var B45 = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ $%*+-./:', B45I = {};
+  for (var q = 0; q < 45; q++) B45I[B45[q]] = q;
+  function b45encode(b) {
+    var s = '', i;
+    for (i = 0; i + 1 < b.length; i += 2) { var n = b[i] * 256 + b[i + 1]; s += B45[n % 45] + B45[Math.floor(n / 45) % 45] + B45[Math.floor(n / 2025)]; }
+    if (b.length & 1) { n = b[b.length - 1]; s += B45[n % 45] + B45[Math.floor(n / 45)]; }
+    return s;
+  }
+  function b45decode(s) {
+    var n = s.length; if (n % 3 === 1) return null;
+    var out = new Uint8Array(Math.floor(n / 3) * 2 + (n % 3 === 2 ? 1 : 0)), o = 0, i, v, a, b2, c2;
+    for (i = 0; i + 3 <= n; i += 3) {
+      a = B45I[s[i]]; b2 = B45I[s[i + 1]]; c2 = B45I[s[i + 2]];
+      if (a === undefined || b2 === undefined || c2 === undefined) return null;
+      v = a + b2 * 45 + c2 * 2025; if (v > 0xFFFF) return null;
+      out[o++] = v >> 8; out[o++] = v & 255;
+    }
+    if (n % 3 === 2) {
+      a = B45I[s[n - 2]]; b2 = B45I[s[n - 1]];
+      if (a === undefined || b2 === undefined) return null;
+      v = a + b2 * 45; if (v > 255) return null; out[o++] = v;
+    }
+    return out;
+  }
+  var B64 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_', B64I = new Int16Array(128).fill(-1);
+  for (q = 0; q < 64; q++) B64I[B64.charCodeAt(q)] = q;
+  function b64uEncode(b) {
+    var s = [], i, n;
+    for (i = 0; i + 2 < b.length; i += 3) { n = (b[i] << 16) | (b[i + 1] << 8) | b[i + 2]; s.push(B64[n >> 18] + B64[(n >> 12) & 63] + B64[(n >> 6) & 63] + B64[n & 63]); }
+    if (b.length - i === 1) { n = b[i] << 16; s.push(B64[n >> 18] + B64[(n >> 12) & 63]); }
+    else if (b.length - i === 2) { n = (b[i] << 16) | (b[i + 1] << 8); s.push(B64[n >> 18] + B64[(n >> 12) & 63] + B64[(n >> 6) & 63]); }
+    return s.join('');
+  }
+  function b64uDecode(s) {
+    var n = s.length; if (n % 4 === 1) return null;
+    var out = new Uint8Array(Math.floor(n * 3 / 4)), o = 0, acc = 0, bits = 0;
+    for (var i = 0; i < n; i++) {
+      var c = s.charCodeAt(i), v = c < 128 ? B64I[c] : -1; if (v < 0) return null;
+      acc = ((acc << 6) | v) & 0xFFFFFF; bits += 6;
+      if (bits >= 8) { bits -= 8; out[o++] = (acc >> bits) & 255; }
+    }
+    return out.subarray(0, o);
+  }
+
+  var core = {
+    MAGIC: MAGIC, KIND_FOUNTAIN: KIND_FOUNTAIN, KIND_RS: KIND_RS, HDR: HDR, TRL: TRL, OVERHEAD: HDR + TRL,
+    sha256: sha256, hex: hex, crc32: crc32, mix32: mix32, fountainRow: fountainRow, layout: layout,
+    parse: parse, pack: pack, FountainEncoder: FountainEncoder, rsEncode: rsEncode, Receiver: Receiver,
+    b45encode: b45encode, b45decode: b45decode, b64uEncode: b64uEncode, b64uDecode: b64uDecode
+  };
+  root.CrushChannels = root.CrushChannels || {};
+  root.CrushChannels.core = core;
+  if (typeof module !== 'undefined' && module.exports) module.exports = core;
+})(typeof globalThis !== 'undefined' ? globalThis : this);
+</script>
+<script>/*
+ * QR Code generator library (TypeScript)
+ *
+ * Copyright (c) Project Nayuki. (MIT License)
+ * https://www.nayuki.io/page/qr-code-generator-library
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy of
+ * this software and associated documentation files (the "Software"), to deal in
+ * the Software without restriction, including without limitation the rights to
+ * use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of
+ * the Software, and to permit persons to whom the Software is furnished to do so,
+ * subject to the following conditions:
+ * - The above copyright notice and this permission notice shall be included in
+ *   all copies or substantial portions of the Software.
+ * - The Software is provided "as is", without warranty of any kind, express or
+ *   implied, including but not limited to the warranties of merchantability,
+ *   fitness for a particular purpose and noninfringement. In no event shall the
+ *   authors or copyright holders be liable for any claim, damages or other
+ *   liability, whether in an action of contract, tort or otherwise, arising from,
+ *   out of or in connection with the Software or the use or other dealings in the
+ *   Software.
+ */
+"use strict";
+var qrcodegen;
+(function (qrcodegen) {
+    /*---- QR Code symbol class ----*/
+    /*
+     * A QR Code symbol, which is a type of two-dimension barcode.
+     * Invented by Denso Wave and described in the ISO/IEC 18004 standard.
+     * Instances of this class represent an immutable square grid of dark and light cells.
+     * The class provides static factory functions to create a QR Code from text or binary data.
+     * The class covers the QR Code Model 2 specification, supporting all versions (sizes)
+     * from 1 to 40, all 4 error correction levels, and 4 character encoding modes.
+     *
+     * Ways to create a QR Code object:
+     * - High level: Take the payload data and call QrCode.encodeText() or QrCode.encodeBinary().
+     * - Mid level: Custom-make the list of segments and call QrCode.encodeSegments().
+     * - Low level: Custom-make the array of data codeword bytes (including
+     *   segment headers and final padding, excluding error correction codewords),
+     *   supply the appropriate version number, and call the QrCode() constructor.
+     * (Note that all ways require supplying the desired error correction level.)
+     */
+    class QrCode {
+        /*-- Static factory functions (high level) --*/
+        // Returns a QR Code representing the given Unicode text string at the given error correction level.
+        // As a conservative upper bound, this function is guaranteed to succeed for strings that have 738 or fewer
+        // Unicode code points (not UTF-16 code units) if the low error correction level is used. The smallest possible
+        // QR Code version is automatically chosen for the output. The ECC level of the result may be higher than the
+        // ecl argument if it can be done without increasing the version.
+        static encodeText(text, ecl) {
+            const segs = qrcodegen.QrSegment.makeSegments(text);
+            return QrCode.encodeSegments(segs, ecl);
+        }
+        // Returns a QR Code representing the given binary data at the given error correction level.
+        // This function always encodes using the binary segment mode, not any text mode. The maximum number of
+        // bytes allowed is 2953. The smallest possible QR Code version is automatically chosen for the output.
+        // The ECC level of the result may be higher than the ecl argument if it can be done without increasing the version.
+        static encodeBinary(data, ecl) {
+            const seg = qrcodegen.QrSegment.makeBytes(data);
+            return QrCode.encodeSegments([seg], ecl);
+        }
+        /*-- Static factory functions (mid level) --*/
+        // Returns a QR Code representing the given segments with the given encoding parameters.
+        // The smallest possible QR Code version within the given range is automatically
+        // chosen for the output. Iff boostEcl is true, then the ECC level of the result
+        // may be higher than the ecl argument if it can be done without increasing the
+        // version. The mask number is either between 0 to 7 (inclusive) to force that
+        // mask, or -1 to automatically choose an appropriate mask (which may be slow).
+        // This function allows the user to create a custom sequence of segments that switches
+        // between modes (such as alphanumeric and byte) to encode text in less space.
+        // This is a mid-level API; the high-level API is encodeText() and encodeBinary().
+        static encodeSegments(segs, ecl, minVersion = 1, maxVersion = 40, mask = -1, boostEcl = true) {
+            if (!(QrCode.MIN_VERSION <= minVersion && minVersion <= maxVersion && maxVersion <= QrCode.MAX_VERSION)
+                || mask < -1 || mask > 7)
+                throw new RangeError("Invalid value");
+            // Find the minimal version number to use
+            let version;
+            let dataUsedBits;
+            for (version = minVersion;; version++) {
+                const dataCapacityBits = QrCode.getNumDataCodewords(version, ecl) * 8; // Number of data bits available
+                const usedBits = QrSegment.getTotalBits(segs, version);
+                if (usedBits <= dataCapacityBits) {
+                    dataUsedBits = usedBits;
+                    break; // This version number is found to be suitable
+                }
+                if (version >= maxVersion) // All versions in the range could not fit the given data
+                    throw new RangeError("Data too long");
+            }
+            // Increase the error correction level while the data still fits in the current version number
+            for (const newEcl of [QrCode.Ecc.MEDIUM, QrCode.Ecc.QUARTILE, QrCode.Ecc.HIGH]) { // From low to high
+                if (boostEcl && dataUsedBits <= QrCode.getNumDataCodewords(version, newEcl) * 8)
+                    ecl = newEcl;
+            }
+            // Concatenate all segments to create the data bit string
+            let bb = [];
+            for (const seg of segs) {
+                appendBits(seg.mode.modeBits, 4, bb);
+                appendBits(seg.numChars, seg.mode.numCharCountBits(version), bb);
+                for (const b of seg.getData())
+                    bb.push(b);
+            }
+            assert(bb.length == dataUsedBits);
+            // Add terminator and pad up to a byte if applicable
+            const dataCapacityBits = QrCode.getNumDataCodewords(version, ecl) * 8;
+            assert(bb.length <= dataCapacityBits);
+            appendBits(0, Math.min(4, dataCapacityBits - bb.length), bb);
+            appendBits(0, (8 - bb.length % 8) % 8, bb);
+            assert(bb.length % 8 == 0);
+            // Pad with alternating bytes until data capacity is reached
+            for (let padByte = 0xEC; bb.length < dataCapacityBits; padByte ^= 0xEC ^ 0x11)
+                appendBits(padByte, 8, bb);
+            // Pack bits into bytes in big endian
+            let dataCodewords = [];
+            while (dataCodewords.length * 8 < bb.length)
+                dataCodewords.push(0);
+            bb.forEach((b, i) => dataCodewords[i >>> 3] |= b << (7 - (i & 7)));
+            // Create the QR Code object
+            return new QrCode(version, ecl, dataCodewords, mask);
+        }
+        /*-- Constructor (low level) and fields --*/
+        // Creates a new QR Code with the given version number,
+        // error correction level, data codeword bytes, and mask number.
+        // This is a low-level API that most users should not use directly.
+        // A mid-level API is the encodeSegments() function.
+        constructor(
+        // The version number of this QR Code, which is between 1 and 40 (inclusive).
+        // This determines the size of this barcode.
+        version, 
+        // The error correction level used in this QR Code.
+        errorCorrectionLevel, dataCodewords, msk) {
+            this.version = version;
+            this.errorCorrectionLevel = errorCorrectionLevel;
+            // The modules of this QR Code (false = light, true = dark).
+            // Immutable after constructor finishes. Accessed through getModule().
+            this.modules = [];
+            // Indicates function modules that are not subjected to masking. Discarded when constructor finishes.
+            this.isFunction = [];
+            // Check scalar arguments
+            if (version < QrCode.MIN_VERSION || version > QrCode.MAX_VERSION)
+                throw new RangeError("Version value out of range");
+            if (msk < -1 || msk > 7)
+                throw new RangeError("Mask value out of range");
+            this.size = version * 4 + 17;
+            // Initialize both grids to be size*size arrays of Boolean false
+            let row = [];
+            for (let i = 0; i < this.size; i++)
+                row.push(false);
+            for (let i = 0; i < this.size; i++) {
+                this.modules.push(row.slice()); // Initially all light
+                this.isFunction.push(row.slice());
+            }
+            // Compute ECC, draw modules
+            this.drawFunctionPatterns();
+            const allCodewords = this.addEccAndInterleave(dataCodewords);
+            this.drawCodewords(allCodewords);
+            // Do masking
+            if (msk == -1) { // Automatically choose best mask
+                let minPenalty = 1000000000;
+                for (let i = 0; i < 8; i++) {
+                    this.applyMask(i);
+                    this.drawFormatBits(i);
+                    const penalty = this.getPenaltyScore();
+                    if (penalty < minPenalty) {
+                        msk = i;
+                        minPenalty = penalty;
+                    }
+                    this.applyMask(i); // Undoes the mask due to XOR
+                }
+            }
+            assert(0 <= msk && msk <= 7);
+            this.mask = msk;
+            this.applyMask(msk); // Apply the final choice of mask
+            this.drawFormatBits(msk); // Overwrite old format bits
+            this.isFunction = [];
+        }
+        /*-- Accessor methods --*/
+        // Returns the color of the module (pixel) at the given coordinates, which is false
+        // for light or true for dark. The top left corner has the coordinates (x=0, y=0).
+        // If the given coordinates are out of bounds, then false (light) is returned.
+        getModule(x, y) {
+            return 0 <= x && x < this.size && 0 <= y && y < this.size && this.modules[y][x];
+        }
+        /*-- Private helper methods for constructor: Drawing function modules --*/
+        // Reads this object's version field, and draws and marks all function modules.
+        drawFunctionPatterns() {
+            // Draw horizontal and vertical timing patterns
+            for (let i = 0; i < this.size; i++) {
+                this.setFunctionModule(6, i, i % 2 == 0);
+                this.setFunctionModule(i, 6, i % 2 == 0);
+            }
+            // Draw 3 finder patterns (all corners except bottom right; overwrites some timing modules)
+            this.drawFinderPattern(3, 3);
+            this.drawFinderPattern(this.size - 4, 3);
+            this.drawFinderPattern(3, this.size - 4);
+            // Draw numerous alignment patterns
+            const alignPatPos = this.getAlignmentPatternPositions();
+            const numAlign = alignPatPos.length;
+            for (let i = 0; i < numAlign; i++) {
+                for (let j = 0; j < numAlign; j++) {
+                    // Don't draw on the three finder corners
+                    if (!(i == 0 && j == 0 || i == 0 && j == numAlign - 1 || i == numAlign - 1 && j == 0))
+                        this.drawAlignmentPattern(alignPatPos[i], alignPatPos[j]);
+                }
+            }
+            // Draw configuration data
+            this.drawFormatBits(0); // Dummy mask value; overwritten later in the constructor
+            this.drawVersion();
+        }
+        // Draws two copies of the format bits (with its own error correction code)
+        // based on the given mask and this object's error correction level field.
+        drawFormatBits(mask) {
+            // Calculate error correction code and pack bits
+            const data = this.errorCorrectionLevel.formatBits << 3 | mask; // errCorrLvl is uint2, mask is uint3
+            let rem = data;
+            for (let i = 0; i < 10; i++)
+                rem = (rem << 1) ^ ((rem >>> 9) * 0x537);
+            const bits = (data << 10 | rem) ^ 0x5412; // uint15
+            assert(bits >>> 15 == 0);
+            // Draw first copy
+            for (let i = 0; i <= 5; i++)
+                this.setFunctionModule(8, i, getBit(bits, i));
+            this.setFunctionModule(8, 7, getBit(bits, 6));
+            this.setFunctionModule(8, 8, getBit(bits, 7));
+            this.setFunctionModule(7, 8, getBit(bits, 8));
+            for (let i = 9; i < 15; i++)
+                this.setFunctionModule(14 - i, 8, getBit(bits, i));
+            // Draw second copy
+            for (let i = 0; i < 8; i++)
+                this.setFunctionModule(this.size - 1 - i, 8, getBit(bits, i));
+            for (let i = 8; i < 15; i++)
+                this.setFunctionModule(8, this.size - 15 + i, getBit(bits, i));
+            this.setFunctionModule(8, this.size - 8, true); // Always dark
+        }
+        // Draws two copies of the version bits (with its own error correction code),
+        // based on this object's version field, iff 7 <= version <= 40.
+        drawVersion() {
+            if (this.version < 7)
+                return;
+            // Calculate error correction code and pack bits
+            let rem = this.version; // version is uint6, in the range [7, 40]
+            for (let i = 0; i < 12; i++)
+                rem = (rem << 1) ^ ((rem >>> 11) * 0x1F25);
+            const bits = this.version << 12 | rem; // uint18
+            assert(bits >>> 18 == 0);
+            // Draw two copies
+            for (let i = 0; i < 18; i++) {
+                const color = getBit(bits, i);
+                const a = this.size - 11 + i % 3;
+                const b = Math.floor(i / 3);
+                this.setFunctionModule(a, b, color);
+                this.setFunctionModule(b, a, color);
+            }
+        }
+        // Draws a 9*9 finder pattern including the border separator,
+        // with the center module at (x, y). Modules can be out of bounds.
+        drawFinderPattern(x, y) {
+            for (let dy = -4; dy <= 4; dy++) {
+                for (let dx = -4; dx <= 4; dx++) {
+                    const dist = Math.max(Math.abs(dx), Math.abs(dy)); // Chebyshev/infinity norm
+                    const xx = x + dx;
+                    const yy = y + dy;
+                    if (0 <= xx && xx < this.size && 0 <= yy && yy < this.size)
+                        this.setFunctionModule(xx, yy, dist != 2 && dist != 4);
+                }
+            }
+        }
+        // Draws a 5*5 alignment pattern, with the center module
+        // at (x, y). All modules must be in bounds.
+        drawAlignmentPattern(x, y) {
+            for (let dy = -2; dy <= 2; dy++) {
+                for (let dx = -2; dx <= 2; dx++)
+                    this.setFunctionModule(x + dx, y + dy, Math.max(Math.abs(dx), Math.abs(dy)) != 1);
+            }
+        }
+        // Sets the color of a module and marks it as a function module.
+        // Only used by the constructor. Coordinates must be in bounds.
+        setFunctionModule(x, y, isDark) {
+            this.modules[y][x] = isDark;
+            this.isFunction[y][x] = true;
+        }
+        /*-- Private helper methods for constructor: Codewords and masking --*/
+        // Returns a new byte string representing the given data with the appropriate error correction
+        // codewords appended to it, based on this object's version and error correction level.
+        addEccAndInterleave(data) {
+            const ver = this.version;
+            const ecl = this.errorCorrectionLevel;
+            if (data.length != QrCode.getNumDataCodewords(ver, ecl))
+                throw new RangeError("Invalid argument");
+            // Calculate parameter numbers
+            const numBlocks = QrCode.NUM_ERROR_CORRECTION_BLOCKS[ecl.ordinal][ver];
+            const blockEccLen = QrCode.ECC_CODEWORDS_PER_BLOCK[ecl.ordinal][ver];
+            const rawCodewords = Math.floor(QrCode.getNumRawDataModules(ver) / 8);
+            const numShortBlocks = numBlocks - rawCodewords % numBlocks;
+            const shortBlockLen = Math.floor(rawCodewords / numBlocks);
+            // Split data into blocks and append ECC to each block
+            let blocks = [];
+            const rsDiv = QrCode.reedSolomonComputeDivisor(blockEccLen);
+            for (let i = 0, k = 0; i < numBlocks; i++) {
+                let dat = data.slice(k, k + shortBlockLen - blockEccLen + (i < numShortBlocks ? 0 : 1));
+                k += dat.length;
+                const ecc = QrCode.reedSolomonComputeRemainder(dat, rsDiv);
+                if (i < numShortBlocks)
+                    dat.push(0);
+                blocks.push(dat.concat(ecc));
+            }
+            // Interleave (not concatenate) the bytes from every block into a single sequence
+            let result = [];
+            for (let i = 0; i < blocks[0].length; i++) {
+                blocks.forEach((block, j) => {
+                    // Skip the padding byte in short blocks
+                    if (i != shortBlockLen - blockEccLen || j >= numShortBlocks)
+                        result.push(block[i]);
+                });
+            }
+            assert(result.length == rawCodewords);
+            return result;
+        }
+        // Draws the given sequence of 8-bit codewords (data and error correction) onto the entire
+        // data area of this QR Code. Function modules need to be marked off before this is called.
+        drawCodewords(data) {
+            if (data.length != Math.floor(QrCode.getNumRawDataModules(this.version) / 8))
+                throw new RangeError("Invalid argument");
+            let i = 0; // Bit index into the data
+            // Do the funny zigzag scan
+            for (let right = this.size - 1; right >= 1; right -= 2) { // Index of right column in each column pair
+                if (right == 6)
+                    right = 5;
+                for (let vert = 0; vert < this.size; vert++) { // Vertical counter
+                    for (let j = 0; j < 2; j++) {
+                        const x = right - j; // Actual x coordinate
+                        const upward = ((right + 1) & 2) == 0;
+                        const y = upward ? this.size - 1 - vert : vert; // Actual y coordinate
+                        if (!this.isFunction[y][x] && i < data.length * 8) {
+                            this.modules[y][x] = getBit(data[i >>> 3], 7 - (i & 7));
+                            i++;
+                        }
+                        // If this QR Code has any remainder bits (0 to 7), they were assigned as
+                        // 0/false/light by the constructor and are left unchanged by this method
+                    }
+                }
+            }
+            assert(i == data.length * 8);
+        }
+        // XORs the codeword modules in this QR Code with the given mask pattern.
+        // The function modules must be marked and the codeword bits must be drawn
+        // before masking. Due to the arithmetic of XOR, calling applyMask() with
+        // the same mask value a second time will undo the mask. A final well-formed
+        // QR Code needs exactly one (not zero, two, etc.) mask applied.
+        applyMask(mask) {
+            if (mask < 0 || mask > 7)
+                throw new RangeError("Mask value out of range");
+            for (let y = 0; y < this.size; y++) {
+                for (let x = 0; x < this.size; x++) {
+                    let invert;
+                    switch (mask) {
+                        case 0:
+                            invert = (x + y) % 2 == 0;
+                            break;
+                        case 1:
+                            invert = y % 2 == 0;
+                            break;
+                        case 2:
+                            invert = x % 3 == 0;
+                            break;
+                        case 3:
+                            invert = (x + y) % 3 == 0;
+                            break;
+                        case 4:
+                            invert = (Math.floor(x / 3) + Math.floor(y / 2)) % 2 == 0;
+                            break;
+                        case 5:
+                            invert = x * y % 2 + x * y % 3 == 0;
+                            break;
+                        case 6:
+                            invert = (x * y % 2 + x * y % 3) % 2 == 0;
+                            break;
+                        case 7:
+                            invert = ((x + y) % 2 + x * y % 3) % 2 == 0;
+                            break;
+                        default: throw new Error("Unreachable");
+                    }
+                    if (!this.isFunction[y][x] && invert)
+                        this.modules[y][x] = !this.modules[y][x];
+                }
+            }
+        }
+        // Calculates and returns the penalty score based on state of this QR Code's current modules.
+        // This is used by the automatic mask choice algorithm to find the mask pattern that yields the lowest score.
+        getPenaltyScore() {
+            let result = 0;
+            // Adjacent modules in row having same color, and finder-like patterns
+            for (let y = 0; y < this.size; y++) {
+                let runColor = false;
+                let runX = 0;
+                let runHistory = [0, 0, 0, 0, 0, 0, 0];
+                for (let x = 0; x < this.size; x++) {
+                    if (this.modules[y][x] == runColor) {
+                        runX++;
+                        if (runX == 5)
+                            result += QrCode.PENALTY_N1;
+                        else if (runX > 5)
+                            result++;
+                    }
+                    else {
+                        this.finderPenaltyAddHistory(runX, runHistory);
+                        if (!runColor)
+                            result += this.finderPenaltyCountPatterns(runHistory) * QrCode.PENALTY_N3;
+                        runColor = this.modules[y][x];
+                        runX = 1;
+                    }
+                }
+                result += this.finderPenaltyTerminateAndCount(runColor, runX, runHistory) * QrCode.PENALTY_N3;
+            }
+            // Adjacent modules in column having same color, and finder-like patterns
+            for (let x = 0; x < this.size; x++) {
+                let runColor = false;
+                let runY = 0;
+                let runHistory = [0, 0, 0, 0, 0, 0, 0];
+                for (let y = 0; y < this.size; y++) {
+                    if (this.modules[y][x] == runColor) {
+                        runY++;
+                        if (runY == 5)
+                            result += QrCode.PENALTY_N1;
+                        else if (runY > 5)
+                            result++;
+                    }
+                    else {
+                        this.finderPenaltyAddHistory(runY, runHistory);
+                        if (!runColor)
+                            result += this.finderPenaltyCountPatterns(runHistory) * QrCode.PENALTY_N3;
+                        runColor = this.modules[y][x];
+                        runY = 1;
+                    }
+                }
+                result += this.finderPenaltyTerminateAndCount(runColor, runY, runHistory) * QrCode.PENALTY_N3;
+            }
+            // 2*2 blocks of modules having same color
+            for (let y = 0; y < this.size - 1; y++) {
+                for (let x = 0; x < this.size - 1; x++) {
+                    const color = this.modules[y][x];
+                    if (color == this.modules[y][x + 1] &&
+                        color == this.modules[y + 1][x] &&
+                        color == this.modules[y + 1][x + 1])
+                        result += QrCode.PENALTY_N2;
+                }
+            }
+            // Balance of dark and light modules
+            let dark = 0;
+            for (const row of this.modules)
+                dark = row.reduce((sum, color) => sum + (color ? 1 : 0), dark);
+            const total = this.size * this.size; // Note that size is odd, so dark/total != 1/2
+            // Compute the smallest integer k >= 0 such that (45-5k)% <= dark/total <= (55+5k)%
+            const k = Math.ceil(Math.abs(dark * 20 - total * 10) / total) - 1;
+            assert(0 <= k && k <= 9);
+            result += k * QrCode.PENALTY_N4;
+            assert(0 <= result && result <= 2568888); // Non-tight upper bound based on default values of PENALTY_N1, ..., N4
+            return result;
+        }
+        /*-- Private helper functions --*/
+        // Returns an ascending list of positions of alignment patterns for this version number.
+        // Each position is in the range [0,177), and are used on both the x and y axes.
+        // This could be implemented as lookup table of 40 variable-length lists of integers.
+        getAlignmentPatternPositions() {
+            if (this.version == 1)
+                return [];
+            else {
+                const numAlign = Math.floor(this.version / 7) + 2;
+                const step = Math.floor((this.version * 8 + numAlign * 3 + 5) / (numAlign * 4 - 4)) * 2;
+                let result = [6];
+                for (let pos = this.size - 7; result.length < numAlign; pos -= step)
+                    result.splice(1, 0, pos);
+                return result;
+            }
+        }
+        // Returns the number of data bits that can be stored in a QR Code of the given version number, after
+        // all function modules are excluded. This includes remainder bits, so it might not be a multiple of 8.
+        // The result is in the range [208, 29648]. This could be implemented as a 40-entry lookup table.
+        static getNumRawDataModules(ver) {
+            if (ver < QrCode.MIN_VERSION || ver > QrCode.MAX_VERSION)
+                throw new RangeError("Version number out of range");
+            let result = (16 * ver + 128) * ver + 64;
+            if (ver >= 2) {
+                const numAlign = Math.floor(ver / 7) + 2;
+                result -= (25 * numAlign - 10) * numAlign - 55;
+                if (ver >= 7)
+                    result -= 36;
+            }
+            assert(208 <= result && result <= 29648);
+            return result;
+        }
+        // Returns the number of 8-bit data (i.e. not error correction) codewords contained in any
+        // QR Code of the given version number and error correction level, with remainder bits discarded.
+        // This stateless pure function could be implemented as a (40*4)-cell lookup table.
+        static getNumDataCodewords(ver, ecl) {
+            return Math.floor(QrCode.getNumRawDataModules(ver) / 8) -
+                QrCode.ECC_CODEWORDS_PER_BLOCK[ecl.ordinal][ver] *
+                    QrCode.NUM_ERROR_CORRECTION_BLOCKS[ecl.ordinal][ver];
+        }
+        // Returns a Reed-Solomon ECC generator polynomial for the given degree. This could be
+        // implemented as a lookup table over all possible parameter values, instead of as an algorithm.
+        static reedSolomonComputeDivisor(degree) {
+            if (degree < 1 || degree > 255)
+                throw new RangeError("Degree out of range");
+            // Polynomial coefficients are stored from highest to lowest power, excluding the leading term which is always 1.
+            // For example the polynomial x^3 + 255x^2 + 8x + 93 is stored as the uint8 array [255, 8, 93].
+            let result = [];
+            for (let i = 0; i < degree - 1; i++)
+                result.push(0);
+            result.push(1); // Start off with the monomial x^0
+            // Compute the product polynomial (x - r^0) * (x - r^1) * (x - r^2) * ... * (x - r^{degree-1}),
+            // and drop the highest monomial term which is always 1x^degree.
+            // Note that r = 0x02, which is a generator element of this field GF(2^8/0x11D).
+            let root = 1;
+            for (let i = 0; i < degree; i++) {
+                // Multiply the current product by (x - r^i)
+                for (let j = 0; j < result.length; j++) {
+                    result[j] = QrCode.reedSolomonMultiply(result[j], root);
+                    if (j + 1 < result.length)
+                        result[j] ^= result[j + 1];
+                }
+                root = QrCode.reedSolomonMultiply(root, 0x02);
+            }
+            return result;
+        }
+        // Returns the Reed-Solomon error correction codeword for the given data and divisor polynomials.
+        static reedSolomonComputeRemainder(data, divisor) {
+            let result = divisor.map(_ => 0);
+            for (const b of data) { // Polynomial division
+                const factor = b ^ result.shift();
+                result.push(0);
+                divisor.forEach((coef, i) => result[i] ^= QrCode.reedSolomonMultiply(coef, factor));
+            }
+            return result;
+        }
+        // Returns the product of the two given field elements modulo GF(2^8/0x11D). The arguments and result
+        // are unsigned 8-bit integers. This could be implemented as a lookup table of 256*256 entries of uint8.
+        static reedSolomonMultiply(x, y) {
+            if (x >>> 8 != 0 || y >>> 8 != 0)
+                throw new RangeError("Byte out of range");
+            // Russian peasant multiplication
+            let z = 0;
+            for (let i = 7; i >= 0; i--) {
+                z = (z << 1) ^ ((z >>> 7) * 0x11D);
+                z ^= ((y >>> i) & 1) * x;
+            }
+            assert(z >>> 8 == 0);
+            return z;
+        }
+        // Can only be called immediately after a light run is added, and
+        // returns either 0, 1, or 2. A helper function for getPenaltyScore().
+        finderPenaltyCountPatterns(runHistory) {
+            const n = runHistory[1];
+            assert(n <= this.size * 3);
+            const core = n > 0 && runHistory[2] == n && runHistory[3] == n * 3 && runHistory[4] == n && runHistory[5] == n;
+            return (core && runHistory[0] >= n * 4 && runHistory[6] >= n ? 1 : 0)
+                + (core && runHistory[6] >= n * 4 && runHistory[0] >= n ? 1 : 0);
+        }
+        // Must be called at the end of a line (row or column) of modules. A helper function for getPenaltyScore().
+        finderPenaltyTerminateAndCount(currentRunColor, currentRunLength, runHistory) {
+            if (currentRunColor) { // Terminate dark run
+                this.finderPenaltyAddHistory(currentRunLength, runHistory);
+                currentRunLength = 0;
+            }
+            currentRunLength += this.size; // Add light border to final run
+            this.finderPenaltyAddHistory(currentRunLength, runHistory);
+            return this.finderPenaltyCountPatterns(runHistory);
+        }
+        // Pushes the given value to the front and drops the last value. A helper function for getPenaltyScore().
+        finderPenaltyAddHistory(currentRunLength, runHistory) {
+            if (runHistory[0] == 0)
+                currentRunLength += this.size; // Add light border to initial run
+            runHistory.pop();
+            runHistory.unshift(currentRunLength);
+        }
+    }
+    /*-- Constants and tables --*/
+    // The minimum version number supported in the QR Code Model 2 standard.
+    QrCode.MIN_VERSION = 1;
+    // The maximum version number supported in the QR Code Model 2 standard.
+    QrCode.MAX_VERSION = 40;
+    // For use in getPenaltyScore(), when evaluating which mask is best.
+    QrCode.PENALTY_N1 = 3;
+    QrCode.PENALTY_N2 = 3;
+    QrCode.PENALTY_N3 = 40;
+    QrCode.PENALTY_N4 = 10;
+    QrCode.ECC_CODEWORDS_PER_BLOCK = [
+        // Version: (note that index 0 is for padding, and is set to an illegal value)
+        //0,  1,  2,  3,  4,  5,  6,  7,  8,  9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40    Error correction level
+        [-1, 7, 10, 15, 20, 26, 18, 20, 24, 30, 18, 20, 24, 26, 30, 22, 24, 28, 30, 28, 28, 28, 28, 30, 30, 26, 28, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30], // Low
+        [-1, 10, 16, 26, 18, 24, 16, 18, 22, 22, 26, 30, 22, 22, 24, 24, 28, 28, 26, 26, 26, 26, 28, 28, 28, 28, 28, 28, 28, 28, 28, 28, 28, 28, 28, 28, 28, 28, 28, 28, 28], // Medium
+        [-1, 13, 22, 18, 26, 18, 24, 18, 22, 20, 24, 28, 26, 24, 20, 30, 24, 28, 28, 26, 30, 28, 30, 30, 30, 30, 28, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30], // Quartile
+        [-1, 17, 28, 22, 16, 22, 28, 26, 26, 24, 28, 24, 28, 22, 24, 24, 30, 28, 28, 26, 28, 30, 24, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30], // High
+    ];
+    QrCode.NUM_ERROR_CORRECTION_BLOCKS = [
+        // Version: (note that index 0 is for padding, and is set to an illegal value)
+        //0, 1, 2, 3, 4, 5, 6, 7, 8, 9,10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40    Error correction level
+        [-1, 1, 1, 1, 1, 1, 2, 2, 2, 2, 4, 4, 4, 4, 4, 6, 6, 6, 6, 7, 8, 8, 9, 9, 10, 12, 12, 12, 13, 14, 15, 16, 17, 18, 19, 19, 20, 21, 22, 24, 25], // Low
+        [-1, 1, 1, 1, 2, 2, 4, 4, 4, 5, 5, 5, 8, 9, 9, 10, 10, 11, 13, 14, 16, 17, 17, 18, 20, 21, 23, 25, 26, 28, 29, 31, 33, 35, 37, 38, 40, 43, 45, 47, 49], // Medium
+        [-1, 1, 1, 2, 2, 4, 4, 6, 6, 8, 8, 8, 10, 12, 16, 12, 17, 16, 18, 21, 20, 23, 23, 25, 27, 29, 34, 34, 35, 38, 40, 43, 45, 48, 51, 53, 56, 59, 62, 65, 68], // Quartile
+        [-1, 1, 1, 2, 4, 4, 4, 5, 6, 8, 8, 11, 11, 16, 16, 18, 16, 19, 21, 25, 25, 25, 34, 30, 32, 35, 37, 40, 42, 45, 48, 51, 54, 57, 60, 63, 66, 70, 74, 77, 81], // High
+    ];
+    qrcodegen.QrCode = QrCode;
+    // Appends the given number of low-order bits of the given value
+    // to the given buffer. Requires 0 <= len <= 31 and 0 <= val < 2^len.
+    function appendBits(val, len, bb) {
+        if (len < 0 || len > 31 || val >>> len != 0)
+            throw new RangeError("Value out of range");
+        for (let i = len - 1; i >= 0; i--) // Append bit by bit
+            bb.push((val >>> i) & 1);
+    }
+    // Returns true iff the i'th bit of x is set to 1.
+    function getBit(x, i) {
+        return ((x >>> i) & 1) != 0;
+    }
+    // Throws an exception if the given condition is false.
+    function assert(cond) {
+        if (!cond)
+            throw new Error("Assertion error");
+    }
+    /*---- Data segment class ----*/
+    /*
+     * A segment of character/binary/control data in a QR Code symbol.
+     * Instances of this class are immutable.
+     * The mid-level way to create a segment is to take the payload data
+     * and call a static factory function such as QrSegment.makeNumeric().
+     * The low-level way to create a segment is to custom-make the bit buffer
+     * and call the QrSegment() constructor with appropriate values.
+     * This segment class imposes no length restrictions, but QR Codes have restrictions.
+     * Even in the most favorable conditions, a QR Code can only hold 7089 characters of data.
+     * Any segment longer than this is meaningless for the purpose of generating QR Codes.
+     */
+    class QrSegment {
+        /*-- Static factory functions (mid level) --*/
+        // Returns a segment representing the given binary data encoded in
+        // byte mode. All input byte arrays are acceptable. Any text string
+        // can be converted to UTF-8 bytes and encoded as a byte mode segment.
+        static makeBytes(data) {
+            let bb = [];
+            for (const b of data)
+                appendBits(b, 8, bb);
+            return new QrSegment(QrSegment.Mode.BYTE, data.length, bb);
+        }
+        // Returns a segment representing the given string of decimal digits encoded in numeric mode.
+        static makeNumeric(digits) {
+            if (!QrSegment.isNumeric(digits))
+                throw new RangeError("String contains non-numeric characters");
+            let bb = [];
+            for (let i = 0; i < digits.length;) { // Consume up to 3 digits per iteration
+                const n = Math.min(digits.length - i, 3);
+                appendBits(parseInt(digits.substring(i, i + n), 10), n * 3 + 1, bb);
+                i += n;
+            }
+            return new QrSegment(QrSegment.Mode.NUMERIC, digits.length, bb);
+        }
+        // Returns a segment representing the given text string encoded in alphanumeric mode.
+        // The characters allowed are: 0 to 9, A to Z (uppercase only), space,
+        // dollar, percent, asterisk, plus, hyphen, period, slash, colon.
+        static makeAlphanumeric(text) {
+            if (!QrSegment.isAlphanumeric(text))
+                throw new RangeError("String contains unencodable characters in alphanumeric mode");
+            let bb = [];
+            let i;
+            for (i = 0; i + 2 <= text.length; i += 2) { // Process groups of 2
+                let temp = QrSegment.ALPHANUMERIC_CHARSET.indexOf(text.charAt(i)) * 45;
+                temp += QrSegment.ALPHANUMERIC_CHARSET.indexOf(text.charAt(i + 1));
+                appendBits(temp, 11, bb);
+            }
+            if (i < text.length) // 1 character remaining
+                appendBits(QrSegment.ALPHANUMERIC_CHARSET.indexOf(text.charAt(i)), 6, bb);
+            return new QrSegment(QrSegment.Mode.ALPHANUMERIC, text.length, bb);
+        }
+        // Returns a new mutable list of zero or more segments to represent the given Unicode text string.
+        // The result may use various segment modes and switch modes to optimize the length of the bit stream.
+        static makeSegments(text) {
+            // Select the most efficient segment encoding automatically
+            if (text == "")
+                return [];
+            else if (QrSegment.isNumeric(text))
+                return [QrSegment.makeNumeric(text)];
+            else if (QrSegment.isAlphanumeric(text))
+                return [QrSegment.makeAlphanumeric(text)];
+            else
+                return [QrSegment.makeBytes(QrSegment.toUtf8ByteArray(text))];
+        }
+        // Returns a segment representing an Extended Channel Interpretation
+        // (ECI) designator with the given assignment value.
+        static makeEci(assignVal) {
+            let bb = [];
+            if (assignVal < 0)
+                throw new RangeError("ECI assignment value out of range");
+            else if (assignVal < (1 << 7))
+                appendBits(assignVal, 8, bb);
+            else if (assignVal < (1 << 14)) {
+                appendBits(0b10, 2, bb);
+                appendBits(assignVal, 14, bb);
+            }
+            else if (assignVal < 1000000) {
+                appendBits(0b110, 3, bb);
+                appendBits(assignVal, 21, bb);
+            }
+            else
+                throw new RangeError("ECI assignment value out of range");
+            return new QrSegment(QrSegment.Mode.ECI, 0, bb);
+        }
+        // Tests whether the given string can be encoded as a segment in numeric mode.
+        // A string is encodable iff each character is in the range 0 to 9.
+        static isNumeric(text) {
+            return QrSegment.NUMERIC_REGEX.test(text);
+        }
+        // Tests whether the given string can be encoded as a segment in alphanumeric mode.
+        // A string is encodable iff each character is in the following set: 0 to 9, A to Z
+        // (uppercase only), space, dollar, percent, asterisk, plus, hyphen, period, slash, colon.
+        static isAlphanumeric(text) {
+            return QrSegment.ALPHANUMERIC_REGEX.test(text);
+        }
+        /*-- Constructor (low level) and fields --*/
+        // Creates a new QR Code segment with the given attributes and data.
+        // The character count (numChars) must agree with the mode and the bit buffer length,
+        // but the constraint isn't checked. The given bit buffer is cloned and stored.
+        constructor(
+        // The mode indicator of this segment.
+        mode, 
+        // The length of this segment's unencoded data. Measured in characters for
+        // numeric/alphanumeric/kanji mode, bytes for byte mode, and 0 for ECI mode.
+        // Always zero or positive. Not the same as the data's bit length.
+        numChars, 
+        // The data bits of this segment. Accessed through getData().
+        bitData) {
+            this.mode = mode;
+            this.numChars = numChars;
+            this.bitData = bitData;
+            if (numChars < 0)
+                throw new RangeError("Invalid argument");
+            this.bitData = bitData.slice(); // Make defensive copy
+        }
+        /*-- Methods --*/
+        // Returns a new copy of the data bits of this segment.
+        getData() {
+            return this.bitData.slice(); // Make defensive copy
+        }
+        // (Package-private) Calculates and returns the number of bits needed to encode the given segments at
+        // the given version. The result is infinity if a segment has too many characters to fit its length field.
+        static getTotalBits(segs, version) {
+            let result = 0;
+            for (const seg of segs) {
+                const ccbits = seg.mode.numCharCountBits(version);
+                if (seg.numChars >= (1 << ccbits))
+                    return Infinity; // The segment's length doesn't fit the field's bit width
+                result += 4 + ccbits + seg.bitData.length;
+            }
+            return result;
+        }
+        // Returns a new array of bytes representing the given string encoded in UTF-8.
+        static toUtf8ByteArray(str) {
+            str = encodeURI(str);
+            let result = [];
+            for (let i = 0; i < str.length; i++) {
+                if (str.charAt(i) != "%")
+                    result.push(str.charCodeAt(i));
+                else {
+                    result.push(parseInt(str.substring(i + 1, i + 3), 16));
+                    i += 2;
+                }
+            }
+            return result;
+        }
+    }
+    /*-- Constants --*/
+    // Describes precisely all strings that are encodable in numeric mode.
+    QrSegment.NUMERIC_REGEX = /^[0-9]*$/;
+    // Describes precisely all strings that are encodable in alphanumeric mode.
+    QrSegment.ALPHANUMERIC_REGEX = /^[A-Z0-9 $%*+.\/:-]*$/;
+    // The set of all legal characters in alphanumeric mode,
+    // where each character value maps to the index in the string.
+    QrSegment.ALPHANUMERIC_CHARSET = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ $%*+-./:";
+    qrcodegen.QrSegment = QrSegment;
+})(qrcodegen || (qrcodegen = {}));
+/*---- Public helper enumeration ----*/
+(function (qrcodegen) {
+    var QrCode;
+    (function (QrCode) {
+        /*
+         * The error correction level in a QR Code symbol. Immutable.
+         */
+        class Ecc {
+            /*-- Constructor and fields --*/
+            constructor(
+            // In the range 0 to 3 (unsigned 2-bit integer).
+            ordinal, 
+            // (Package-private) In the range 0 to 3 (unsigned 2-bit integer).
+            formatBits) {
+                this.ordinal = ordinal;
+                this.formatBits = formatBits;
+            }
+        }
+        /*-- Constants --*/
+        Ecc.LOW = new Ecc(0, 1); // The QR Code can tolerate about  7% erroneous codewords
+        Ecc.MEDIUM = new Ecc(1, 0); // The QR Code can tolerate about 15% erroneous codewords
+        Ecc.QUARTILE = new Ecc(2, 3); // The QR Code can tolerate about 25% erroneous codewords
+        Ecc.HIGH = new Ecc(3, 2); // The QR Code can tolerate about 30% erroneous codewords
+        QrCode.Ecc = Ecc;
+    })(QrCode = qrcodegen.QrCode || (qrcodegen.QrCode = {}));
+})(qrcodegen || (qrcodegen = {}));
+/*---- Public helper enumeration ----*/
+(function (qrcodegen) {
+    var QrSegment;
+    (function (QrSegment) {
+        /*
+         * Describes how a segment's data bits are interpreted. Immutable.
+         */
+        class Mode {
+            /*-- Constructor and fields --*/
+            constructor(
+            // The mode indicator bits, which is a uint4 value (range 0 to 15).
+            modeBits, 
+            // Number of character count bits for three different version ranges.
+            numBitsCharCount) {
+                this.modeBits = modeBits;
+                this.numBitsCharCount = numBitsCharCount;
+            }
+            /*-- Method --*/
+            // (Package-private) Returns the bit width of the character count field for a segment in
+            // this mode in a QR Code at the given version number. The result is in the range [0, 16].
+            numCharCountBits(ver) {
+                return this.numBitsCharCount[Math.floor((ver + 7) / 17)];
+            }
+        }
+        /*-- Constants --*/
+        Mode.NUMERIC = new Mode(0x1, [10, 12, 14]);
+        Mode.ALPHANUMERIC = new Mode(0x2, [9, 11, 13]);
+        Mode.BYTE = new Mode(0x4, [8, 16, 16]);
+        Mode.KANJI = new Mode(0x8, [8, 10, 12]);
+        Mode.ECI = new Mode(0x7, [0, 0, 0]);
+        QrSegment.Mode = Mode;
+    })(QrSegment = qrcodegen.QrSegment || (qrcodegen.QrSegment = {}));
+})(qrcodegen || (qrcodegen = {}));
+</script>
+<script>/* crushchan qrstream.js - QR helpers, fountain stream sender, camera/image QR receiver.
+ * Needs: core.js, vendor qrcodegen.js (sender), vendor jsQR.js (receiver fallback).
+ * API (globalThis.CrushChannels):
+ *   qr.symbolSize(version, ecl)                    -> fountain symbol size T that fills one code
+ *   qr.encode(packetBytes, version, ecl)           -> qrcodegen.QrCode
+ *   qr.draw(canvas, qrCode, quietModules)
+ *   stream.Sender(canvas, bytes, {version, ecl, rate}) .start() .stop() .n
+ *   scan.decodeImageData(imageData, {multi})       -> Promise<[string]>   (BarcodeDetector or jsQR)
+ *   scan.Camera(videoEl, onStrings, opts)          .start() .stop()
+ */
+(function (root) {
+  'use strict';
+  var CC = root.CrushChannels = root.CrushChannels || {};
+  var core = CC.core;
+  function qrgen() { return root.qrcodegen || (typeof qrcodegen !== 'undefined' ? qrcodegen : null); }
+
+  /* ---------------------------------------------------------------- QR helpers */
+  function eclObj(e) { var Q = qrgen().QrCode.Ecc; return { l: Q.LOW, m: Q.MEDIUM, q: Q.QUARTILE, h: Q.HIGH }[String(e).toLowerCase()]; }
+  function alnumCapacity(version, ecl) {
+    var bits = qrgen().QrCode.getNumDataCodewords(version, eclObj(ecl)) * 8 - 4 - (version < 10 ? 9 : version < 27 ? 11 : 13);
+    return Math.floor(bits / 11) * 2 + (bits % 11 >= 6 ? 1 : 0);
+  }
+  function maxPacketBytes(version, ecl) { var c = alnumCapacity(version, ecl); return Math.floor(c / 3) * 2 + (c % 3 === 2 ? 1 : 0); }
+  function symbolSize(version, ecl) { return maxPacketBytes(version, ecl) - core.OVERHEAD; }
+  function encode(packet, version, ecl) {
+    var g = qrgen();
+    return g.QrCode.encodeSegments([g.QrSegment.makeAlphanumeric(core.b45encode(packet))], eclObj(ecl), version, version, -1, false);
+  }
+  function draw(canvas, q, quiet) {
+    quiet = quiet === undefined ? 4 : quiet;
+    var n = q.size + 2 * quiet, ctx = canvas.getContext('2d');
+    if (canvas.width !== n || canvas.height !== n) { canvas.width = n; canvas.height = n; }
+    var img = ctx.createImageData(n, n), d = img.data;
+    for (var i = 0; i < d.length; i += 4) { d[i] = d[i + 1] = d[i + 2] = 255; d[i + 3] = 255; }
+    for (var y = 0; y < q.size; y++) for (var x = 0; x < q.size; x++) if (q.getModule(x, y)) {
+      var o = ((y + quiet) * n + x + quiet) * 4; d[o] = d[o + 1] = d[o + 2] = 0;
+    }
+    ctx.putImageData(img, 0, 0);
+  }
+  CC.qr = { alnumCapacity: alnumCapacity, maxPacketBytes: maxPacketBytes, symbolSize: symbolSize, encode: encode, draw: draw };
+
+  /* ---------------------------------------------------------------- stream sender */
+  function Sender(canvas, bytes, opts) {
+    opts = opts || {};
+    this.canvas = canvas; this.version = opts.version || 20; this.ecl = opts.ecl || 'l'; this.rate = opts.rate || 10;
+    this.enc = new core.FountainEncoder(bytes, symbolSize(this.version, this.ecl));
+    this.n = opts.start || 0; this.timer = null; this.onframe = opts.onframe || null;
+  }
+  Sender.prototype.frame = function () {
+    var pk = this.enc.nth(this.n);
+    draw(this.canvas, encode(pk, this.version, this.ecl), 4);
+    if (this.onframe) this.onframe(this.n, this);
+    this.n++;
+  };
+  Sender.prototype.start = function () {
+    var self = this, t0 = performance.now(), shown = 0;
+    this.stop();
+    function tick() {
+      // paced by wall clock so a slow machine drops rate instead of drifting
+      var due = Math.floor((performance.now() - t0) * self.rate / 1000);
+      if (due >= shown) { self.frame(); shown = due + 1; }
+      self.timer = requestAnimationFrame(tick);
+    }
+    tick();
+  };
+  Sender.prototype.stop = function () { if (this.timer) cancelAnimationFrame(this.timer); this.timer = null; };
+  CC.stream = { Sender: Sender };
+
+  /* ---------------------------------------------------------------- scanning */
+  var detector = null, detectorChecked = false;
+  function getDetector() {
+    if (detectorChecked) return Promise.resolve(detector);
+    detectorChecked = true;
+    if (!('BarcodeDetector' in root)) return Promise.resolve(null);
+    return Promise.resolve(root.BarcodeDetector.getSupportedFormats ? root.BarcodeDetector.getSupportedFormats() : ['qr_code'])
+      .then(function (f) { if (f.indexOf('qr_code') >= 0) detector = new root.BarcodeDetector({ formats: ['qr_code'] }); return detector; })
+      .catch(function () { return null; });
+  }
+  function jsqrFn() { var j = root.jsQR; return j && j.default ? j.default : j; }
+
+  function blankQuad(d, W, H, L) {
+    var pts = [L.topLeftCorner, L.topRightCorner, L.bottomRightCorner, L.bottomLeftCorner];
+    var cx = 0, cy = 0, i; for (i = 0; i < 4; i++) { cx += pts[i].x / 4; cy += pts[i].y / 4; }
+    var q = pts.map(function (p) { return { x: cx + (p.x - cx) * 1.25, y: cy + (p.y - cy) * 1.25 }; });
+    var x0 = Math.max(0, Math.floor(Math.min.apply(null, q.map(function (p) { return p.x; })))), x1 = Math.min(W - 1, Math.ceil(Math.max.apply(null, q.map(function (p) { return p.x; }))));
+    var y0 = Math.max(0, Math.floor(Math.min.apply(null, q.map(function (p) { return p.y; })))), y1 = Math.min(H - 1, Math.ceil(Math.max.apply(null, q.map(function (p) { return p.y; }))));
+    for (var y = y0; y <= y1; y++) for (var x = x0; x <= x1; x++) {
+      var ins = true;
+      for (i = 0; i < 4; i++) { var a = q[i], b = q[(i + 1) % 4]; if ((b.x - a.x) * (y - a.y) - (b.y - a.y) * (x - a.x) < 0) { ins = false; break; } }
+      if (ins) { var o = (y * W + x) * 4; d[o] = d[o + 1] = d[o + 2] = 255; }
+    }
+  }
+  function cropImageData(src, x0, y0, w, h) {
+    var out = new Uint8ClampedArray(w * h * 4), W = src.width;
+    for (var y = 0; y < h; y++) out.set(src.data.subarray(((y0 + y) * W + x0) * 4, ((y0 + y) * W + x0 + w) * 4), y * w * 4);
+    return { data: out, width: w, height: h };
+  }
+  /* jsQR finds one code per call: for multi, blank each found code and retry, and when
+   * the whole image fails, also try overlapping tiles (a failing code can mask others). */
+  /* Preprocessing. jsQR's binarizer turns sensor noise in flat white areas into
+   * speckle once a 8x8 block's range exceeds 24 levels; a 2x2 box filter fixes most of
+   * it (measured in tests/sim_stream.py: see REPORT.md). variant: 'raw' | 'b2' | 'b3'. */
+  function prep(img, variant) {
+    var W = img.width, H = img.height, s = img.data, n = W * H, g = new Uint8Array(n), i, x, y;
+    for (i = 0; i < n; i++) g[i] = (s[i * 4] * 54 + s[i * 4 + 1] * 183 + s[i * 4 + 2] * 19) >> 8;
+    if (variant === 'bin') return binarize(g, W, H);
+    var k = variant === 'b3' ? 3 : variant === 'b2' ? 2 : 1, out = new Uint8ClampedArray(n * 4);
+    if (k === 1) { for (i = 0; i < n; i++) { out[i * 4] = out[i * 4 + 1] = out[i * 4 + 2] = g[i]; out[i * 4 + 3] = 255; } return out; }
+    for (y = 0; y < H; y++) for (x = 0; x < W; x++) {
+      var sum = 0, cnt = 0;
+      for (var dy = 0; dy < k; dy++) { var yy = y + dy - (k === 3 ? 1 : 0); if (yy < 0 || yy >= H) continue;
+        for (var dx = 0; dx < k; dx++) { var xx = x + dx - (k === 3 ? 1 : 0); if (xx < 0 || xx >= W) continue; sum += g[yy * W + xx]; cnt++; } }
+      var v = (sum / cnt) | 0, o = (y * W + x) * 4; out[o] = out[o + 1] = out[o + 2] = v; out[o + 3] = 255;
+    }
+    return out;
+  }
+  /* 'bin': our own adaptive threshold handed to jsQR as a clean black/white image.
+   * 2x2 box filter, then local mean over a (min(W,H)/24)-wide window via an integral image;
+   * a pixel is black only if it is darker than the local mean by > 6% of the local range
+   * floor, so flat white paper/screen areas become solid white instead of speckle. */
+  function binarize(g, W, H) {
+    var n = W * H, f = new Uint8Array(n), x, y, i;
+    for (y = 0; y < H; y++) for (x = 0; x < W; x++) {
+      var x1 = x + 1 < W ? x + 1 : x, y1 = y + 1 < H ? y + 1 : y;
+      f[y * W + x] = (g[y * W + x] + g[y * W + x1] + g[y1 * W + x] + g[y1 * W + x1]) >> 2;
+    }
+    var I = new Float64Array((W + 1) * (H + 1));
+    for (y = 0; y < H; y++) { var rs = 0; for (x = 0; x < W; x++) { rs += f[y * W + x]; I[(y + 1) * (W + 1) + x + 1] = I[y * (W + 1) + x + 1] + rs; } }
+    var r = Math.max(4, Math.round(Math.min(W, H) / 48)), out = new Uint8ClampedArray(n * 4);
+    for (y = 0; y < H; y++) {
+      var ya = Math.max(0, y - r), yb = Math.min(H, y + r + 1);
+      for (x = 0; x < W; x++) {
+        var xa = Math.max(0, x - r), xb = Math.min(W, x + r + 1);
+        var sum = I[yb * (W + 1) + xb] - I[ya * (W + 1) + xb] - I[yb * (W + 1) + xa] + I[ya * (W + 1) + xa];
+        var mean = sum / ((yb - ya) * (xb - xa)), v = f[y * W + x] < mean * 0.94 ? 0 : 255, o = (y * W + x) * 4;
+        out[o] = out[o + 1] = out[o + 2] = v; out[o + 3] = 255;
+      }
+    }
+    return out;
+  }
+  function jsqrMulti(img, multi, variants) {
+    var jsQR = jsqrFn(), found = [], seen = {};
+    if (!jsQR) return found;
+    if (!multi) {
+      variants = variants || ['b2'];
+      for (var vi = 0; vi < variants.length && !found.length; vi++) jsqrTry(jsQR, prep(img, variants[vi]), img.width, img.height, found, seen, 1);
+      return found;
+    }
+    /* Several codes per image (paper pages). jsQR returns only the "best" code and gives up
+     * when that one fails, and finder patterns of neighbouring codes confuse it. So: find the
+     * code-like regions ourselves (blocks with strong local contrast, closed, connected
+     * components that are roughly square), crop each with a margin, and decode each crop on
+     * the raw image, then on the 2x2-filtered one. Uniform areas (a hand, a stain) are skipped. */
+    var W = img.width, H = img.height, raw = prep(img, 'raw'), b2 = null;
+    var regs = findCodeRegions(raw, W, H);
+    for (var ri = 0; ri < regs.length; ri++) {
+      var R = regs[ri];
+      var c = cropImageData({ data: raw, width: W }, R.x, R.y, R.w, R.h);
+      if (jsqrTry(jsQR, c.data, R.w, R.h, found, seen, 2)) continue;
+      if (!b2) b2 = prep(img, 'b2');
+      c = cropImageData({ data: b2, width: W }, R.x, R.y, R.w, R.h);
+      jsqrTry(jsQR, c.data, R.w, R.h, found, seen, 2);
+    }
+    if (!found.length) jsqrTry(jsQR, raw, W, H, found, seen, 4);
+    return found;
+  }
+  function findCodeRegions(rgba, W, H) {
+    var bs = Math.max(4, Math.round(Math.min(W, H) / 160)), bw = Math.ceil(W / bs), bh = Math.ceil(H / bs);
+    var act = new Uint8Array(bw * bh), x, y, i, j;
+    for (j = 0; j < bh; j++) for (i = 0; i < bw; i++) {
+      var mn = 255, mx = 0;
+      for (y = j * bs; y < Math.min(H, (j + 1) * bs); y++) for (x = i * bs; x < Math.min(W, (i + 1) * bs); x++) {
+        var v = rgba[(y * W + x) * 4]; if (v < mn) mn = v; if (v > mx) mx = v;
+      }
+      act[j * bw + i] = mx - mn > 50 ? 1 : 0;
+    }
+    function morph(src, dil) {
+      var out = new Uint8Array(bw * bh);
+      for (var jj = 0; jj < bh; jj++) for (var ii = 0; ii < bw; ii++) {
+        var acc = dil ? 0 : 1;
+        for (var dy = -1; dy <= 1; dy++) for (var dx = -1; dx <= 1; dx++) {
+          var yy = jj + dy, xx = ii + dx, v2 = (yy < 0 || yy >= bh || xx < 0 || xx >= bw) ? 0 : src[yy * bw + xx];
+          if (dil) acc |= v2; else acc &= v2;
+        }
+        out[jj * bw + ii] = acc;
+      }
+      return out;
+    }
+    act = morph(morph(act, false), true);       // open: drop thin text lines (labels, header)
+    act = morph(morph(act, true), false);       // close small holes inside codes
+    var lab = new Int32Array(bw * bh), regs = [], stack = [];
+    for (var k = 0; k < bw * bh; k++) {
+      if (!act[k] || lab[k]) continue;
+      var x0 = bw, x1 = -1, y0 = bh, y1 = -1, cnt = 0; lab[k] = regs.length + 1; stack.push(k);
+      while (stack.length) {
+        var q = stack.pop(), qx = q % bw, qy = (q - qx) / bw; cnt++;
+        if (qx < x0) x0 = qx; if (qx > x1) x1 = qx; if (qy < y0) y0 = qy; if (qy > y1) y1 = qy;
+        var nb = [q - 1, q + 1, q - bw, q + bw];
+        for (var t = 0; t < 4; t++) {
+          var n2 = nb[t]; if (n2 < 0 || n2 >= bw * bh) continue;
+          if ((t === 0 && qx === 0) || (t === 1 && qx === bw - 1)) continue;
+          if (act[n2] && !lab[n2]) { lab[n2] = lab[k]; stack.push(n2); }
+        }
+      }
+      var w = x1 - x0 + 1, h = y1 - y0 + 1;
+      regs.push({ x0: x0, y0: y0, w: w, h: h, fill: cnt / (w * h) });
+    }
+    var out = [];
+    function emit(x0, y0, w, h) {
+      var m = Math.round(Math.max(w, h) * 0.12) + 1;
+      var X = Math.max(0, (x0 - m) * bs), Y = Math.max(0, (y0 - m) * bs);
+      var X1 = Math.min(W, (x0 + w + m) * bs), Y1 = Math.min(H, (y0 + h + m) * bs);
+      out.push({ x: X, y: Y, w: X1 - X, h: Y1 - Y });
+    }
+    for (k = 0; k < regs.length; k++) {
+      var r = regs[k];
+      if (r.w < 6 || r.h < 6 || r.fill < 0.35) continue;
+      // codes in a row/column that touched each other (through labels) form an n:1 strip: split it
+      var nx = Math.max(1, Math.round(r.w / r.h)), ny = Math.max(1, Math.round(r.h / r.w));
+      if (nx > 6 || ny > 6) continue;
+      for (var sy = 0; sy < ny; sy++) for (var sx = 0; sx < nx; sx++)
+        emit(r.x0 + Math.floor(sx * r.w / nx), r.y0 + Math.floor(sy * r.h / ny), Math.ceil(r.w / nx), Math.ceil(r.h / ny));
+    }
+    return out;
+  }
+  /* up to `rounds` codes from one buffer (found codes are blanked between rounds). Returns count decoded. */
+  function jsqrTry(jsQR, d, W, H, found, seen, rounds) {
+    var n = 0;
+    for (var k = 0; k < rounds; k++) {
+      var r = jsQR(d, W, H, { inversionAttempts: 'dontInvert' });
+      if (!r) break;
+      n++;
+      if (!seen[r.data]) { seen[r.data] = 1; found.push(r.data); }
+      if (k + 1 < rounds) blankQuad(d, W, H, r.location);
+    }
+    return n;
+  }
+  /* zxing-cpp (WASM, via zxing-wasm) when the page inlined it: much stronger than jsQR on
+   * noisy / multi-code images (measured in REPORT.md). Loaded from an inline base64 string,
+   * never from the network. */
+  var zxPromise = null;
+  function zxReady() {
+    if (zxPromise) return zxPromise;
+    var Z = root.ZXingWASM, b64 = root.CC_ZXING_WASM_B64;
+    if (!Z || !b64) return (zxPromise = Promise.resolve(false));
+    var bin = typeof atob === 'function' ? atob(b64) : Buffer.from(b64, 'base64').toString('binary');
+    var u = new Uint8Array(bin.length); for (var i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i);
+    zxPromise = Promise.resolve(Z.prepareZXingModule({ overrides: { wasmBinary: u.buffer }, fireImmediately: true }))
+      .then(function () { return true; }, function () { return false; });
+    return zxPromise;
+  }
+  function zxDecode(img, multi) {
+    return root.ZXingWASM.readBarcodesFromImageData({ data: img.data, width: img.width, height: img.height, colorSpace: 'srgb' },
+      { formats: ['QRCode'], maxNumberOfSymbols: multi ? 64 : 1, tryHarder: true })
+      .then(function (rs) { return rs.filter(function (r) { return r.isValid; }).map(function (r) { return r.text; }); });
+  }
+  /* imageData: {data: RGBA, width, height}. opts.source: canvas for BarcodeDetector.
+   * Engine order: BarcodeDetector (if the browser has one) -> zxing-cpp WASM (if inlined) -> jsQR. */
+  function decodeImageData(imageData, opts) {
+    opts = opts || {};
+    function soft() {
+      if (opts.engine === 'jsqr') return Promise.resolve(jsqrMulti(imageData, !!opts.multi, opts.variants));
+      return zxReady().then(function (ok) {
+        return ok ? zxDecode(imageData, !!opts.multi) : jsqrMulti(imageData, !!opts.multi, opts.variants);
+      });
+    }
+    if (opts.engine) return soft();
+    return getDetector().then(function (det) {
+      if (!det) return soft();
+      return det.detect(opts.source || imageData).then(function (rs) {
+        var out = rs.map(function (r) { return r.rawValue; });
+        return (out.length || !opts.fallback) ? out : soft();
+      }, soft);
+    });
+  }
+  function engineName() {
+    return getDetector().then(function (det) { return det ? 'BarcodeDetector' : zxReady().then(function (ok) { return ok ? 'zxing-cpp' : 'jsQR'; }); });
+  }
+
+  /* Camera loop: grabs the newest video frame whenever the previous decode finished. */
+  function Camera(video, onStrings, opts) {
+    this.video = video; this.onStrings = onStrings; this.opts = opts || {};
+    this.canvas = document.createElement('canvas'); this.running = false; this.stream = null;
+    this.stats = { frames: 0, ms: 0, codes: 0, engine: '' };
+  }
+  Camera.prototype.start = function () {
+    var self = this;
+    var constraints = { audio: false, video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 30 } } };
+    if (this.opts.deviceId) constraints.video.deviceId = { exact: this.opts.deviceId };
+    return navigator.mediaDevices.getUserMedia(constraints).then(function (s) {
+      self.stream = s; self.video.srcObject = s; self.video.setAttribute('playsinline', ''); self.video.muted = true;
+      return self.video.play();
+    }).then(function () { return engineName(); }).then(function (name) {
+      self.stats.engine = name;
+      self.running = true; self.loop();
+    });
+  };
+  Camera.prototype.loop = function () {
+    var self = this;
+    if (!this.running) return;
+    var v = this.video, W = v.videoWidth, H = v.videoHeight;
+    if (!W || !H) { setTimeout(function () { self.loop(); }, 50); return; }
+    var maxW = this.opts.maxWidth || 1280, s = Math.min(1, maxW / W);
+    var w = Math.round(W * s), h = Math.round(H * s), c = this.canvas;
+    if (c.width !== w) c.width = w; if (c.height !== h) c.height = h;
+    var ctx = c.getContext('2d', { willReadFrequently: true });
+    ctx.drawImage(v, 0, 0, w, h);
+    var t0 = performance.now();
+    var img = ctx.getImageData(0, 0, w, h);
+    decodeImageData(img, { source: c, multi: !!this.opts.multi }).then(function (strs) {
+      self.stats.frames++; self.stats.ms += performance.now() - t0; self.stats.codes += strs.length;
+      if (strs.length) self.onStrings(strs);
+    }, function () { }).then(function () {
+      if (self.running) (root.requestAnimationFrame ? requestAnimationFrame : setTimeout)(function () { self.loop(); });
+    });
+  };
+  Camera.prototype.stop = function () {
+    this.running = false;
+    if (this.stream) this.stream.getTracks().forEach(function (t) { t.stop(); });
+    this.stream = null;
+  };
+  CC.scan = { decodeImageData: decodeImageData, zxReady: zxReady, engineName: engineName, jsqrMulti: jsqrMulti, prep: prep, findCodeRegions: findCodeRegions, Camera: Camera, getDetector: getDetector };
+
+  /* ---------------------------------------------------------------- string -> packet helper */
+  CC.feedStrings = function (receiver, strs) {
+    var any = false;
+    for (var i = 0; i < strs.length; i++) {
+      var b = core.b45decode(String(strs[i]).trim());
+      if (b && receiver.feed(b)) any = true;
+    }
+    return any || !!receiver.result;
+  };
+})(typeof globalThis !== 'undefined' ? globalThis : this);
+</script>
+<script>/* crushchan ui.js - shared result panel. On success it dispatches
+ *   window 'crush-archive' CustomEvent {detail: {bytes: Uint8Array, sha256: hex, channel}}
+ * so a host page (e.g. Crush's self-extracting share .html) can take the bytes directly. */
+(function (root) {
+  'use strict';
+  var CC = root.CrushChannels = root.CrushChannels || {};
+  function fmt(n) { return n < 1024 ? n + ' B' : n < 1048576 ? (n / 1024).toFixed(1) + ' KiB' : (n / 1048576).toFixed(2) + ' MiB'; }
+  function save(bytes, name) {
+    var a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([bytes], { type: 'application/octet-stream' }));
+    a.download = name || 'received.crush';
+    document.body.appendChild(a); a.click();
+    setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+  }
+  function showResult(el, bytes, sha, channel, extra) {
+    el.innerHTML = '';
+    var h = document.createElement('div'); h.className = 'cc-ok';
+    h.textContent = 'Received ' + fmt(bytes.length) + ' - SHA-256 verified';
+    var s = document.createElement('div'); s.className = 'cc-hash'; s.textContent = 'SHA-256 ' + sha;
+    var b = document.createElement('button'); b.textContent = 'Save archive'; b.className = 'cc-btn';
+    b.onclick = function () { save(bytes, (CC.saveName || 'received') + '.crush'); };
+    el.appendChild(h); el.appendChild(s);
+    if (extra) { var e = document.createElement('div'); e.className = 'cc-extra'; e.textContent = extra; el.appendChild(e); }
+    el.appendChild(b);
+    CC.lastResult = { bytes: bytes, sha256: sha, channel: channel };
+    try { root.dispatchEvent(new CustomEvent('crush-archive', { detail: CC.lastResult })); } catch (err) { }
+  }
+  function readFile(file) {
+    return new Promise(function (res, rej) { var r = new FileReader(); r.onload = function () { res(new Uint8Array(r.result)); }; r.onerror = rej; r.readAsArrayBuffer(file); });
+  }
+  CC.ui = { fmt: fmt, save: save, showResult: showResult, readFile: readFile };
+})(typeof globalThis !== 'undefined' ? globalThis : this);
+</script>
+<script>
+(function () {
+  var CC = CrushChannels, bytes = null, sender = null, $ = function (i) { return document.getElementById(i); };
+  function info() {
+    if (!bytes) return;
+    var v = +$('ver').value, e = $('ecl').value, T = CC.qr.symbolSize(v, e), lay = CC.core.layout(bytes.length, T);
+    var r = +$('rate').value || 8;
+    $('info').textContent = CC.ui.fmt(bytes.length) + ' archive - ' + lay.ktot + ' source packets of ' + T + ' B (' + lay.B + ' block' + (lay.B > 1 ? 's' : '') +
+      '). With no frames missed the receiver needs about ' + Math.ceil(lay.ktot / r) + ' s at ' + r + ' codes/s; with 30% missed about ' + Math.ceil(lay.ktot / 0.7 / r) + ' s.';
+  }
+  function load(b, name) { bytes = b; $('go').disabled = false; info(); }
+  $('file').onchange = function () { if (this.files[0]) CC.ui.readFile(this.files[0]).then(load); };
+  var dz = $('drop');
+  dz.ondragover = function (e) { e.preventDefault(); };
+  dz.ondrop = function (e) { e.preventDefault(); if (e.dataTransfer.files[0]) CC.ui.readFile(e.dataTransfer.files[0]).then(load); };
+  ['ver', 'ecl', 'rate'].forEach(function (i) { $(i).onchange = function () { info(); if (sender) start(); }; });
+  function start() {
+    if (sender) sender.stop();
+    sender = new CC.stream.Sender($('qr'), bytes, { version: +$('ver').value, ecl: $('ecl').value, rate: +$('rate').value || 8,
+      onframe: function (n, s) { $('ctr').textContent = 'frame ' + n + (n < s.enc.ktot ? ' (source)' : ' (repair)'); } });
+    sender.start();
+  }
+  $('go').onclick = start;
+  $('stop').onclick = function () { if (sender) sender.stop(); };
+  $('full').onclick = function () { document.body.classList.toggle('full'); if (document.body.requestFullscreen && document.body.classList.contains('full')) document.body.requestFullscreen().catch(function () {}); };
+  document.addEventListener('keydown', function (e) { if (e.key === 'Escape') document.body.classList.remove('full'); });
+  // host pages (e.g. the share package) can call this with the archive bytes
+  CC.sendStream = function (b, opts) { load(b); if (opts) { if (opts.version) $('ver').value = opts.version; if (opts.ecl) $('ecl').value = opts.ecl; if (opts.rate) $('rate').value = opts.rate; info(); } start(); };
+})();
+</script>
+</body></html>

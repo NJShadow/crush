@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Crush Audio Modem</title>
+<style>/*INLINE:src/style.css*/</style></head>
+<body><main>
+<h1>Send or receive a Crush archive as sound</h1>
+<p class="mut">The sender plays (or saves) a sound; the receiver listens with its microphone, or reads a recording. Frames that are drowned out are simply skipped: the transfer completes once enough frames have been heard, and the result is checked against its SHA-256. Nothing leaves this device.</p>
+<div class="card">
+  <h2 style="font-size:16px;margin:0 0 6px">Receive</h2>
+  <button id="mic">Listen with microphone</button><button id="stopmic" class="sec">Stop</button>
+  <span class="mut">or open a recording: <input type="file" id="rec" accept="audio/*,.wav"></span>
+  <div class="bar" style="margin-top:8px"><div id="bar"></div></div>
+  <div class="mut" id="stat">Idle.</div>
+  <div id="result"></div>
+</div>
+<div class="card">
+  <h2 style="font-size:16px;margin:0 0 6px">Send</h2>
+  <input type="file" id="file">
+  <label>Mode <select id="mode"><option value="echo" selected>echo-proof (rooms, ~130 B/s)</option><option value="robust">robust (~145 B/s)</option><option value="fast">fast (cable / very close, ~285 B/s)</option></select></label>
+  <label>Spare frames <select id="rep"><option value="0.25">25%</option><option value="0.5" selected>50%</option><option value="1">100%</option></select></label>
+  <div><button id="play" disabled>Play</button><button id="save" class="sec" disabled>Save WAV</button></div>
+  <div class="mut" id="sinfo"></div>
+</div>
+<p class="mut">Tips: set the sender's volume to a comfortable level (not maximum), keep the devices within about a metre, and avoid talking nearby. Browser audio "enhancements" (echo cancellation, noise suppression, auto gain) are switched off by this page.</p>
+</main>
+<script>/*INLINE:src/core.js*/</script>
+<script>/*INLINE:src/audio.js*/</script>
+<script>/*INLINE:src/ui.js*/</script>
+<script>
+(function () {
+  var CC = CrushChannels, $ = function (i) { return document.getElementById(i); };
+  var rx = new CC.audio.Rx(), mic = null, t0 = null, timer = null, shown = false, sendBytes = null, sig = null;
+  CC.audioRx = rx;
+  function update() {
+    var r = rx.rx, s = rx.stats, p = r.progress();
+    $('bar').style.width = (100 * (r.result ? 1 : p)).toFixed(1) + '%';
+    var txt = s.ok + ' frames decoded' + (s.bad ? ', ' + s.bad + ' unreadable' : '') + (s.mode ? ' (' + s.mode + ' mode)' : '') +
+      (r.p ? ' - ' + CC.ui.fmt(r.p.L) + ', ' + (100 * p).toFixed(0) + '%' : '') + (mic ? ' - input level ' + (20 * Math.log10(s.level + 1e-9)).toFixed(0) + ' dBFS' : '');
+    $('stat').textContent = txt;
+    if (r.result && !shown) {
+      shown = true; if (mic) mic.stop(); if (timer) clearInterval(timer);
+      var secs = t0 ? (performance.now() - t0) / 1000 : 0;
+      CC.ui.showResult($('result'), r.result, r.sha256, 'audio', secs ? 'Completed after ' + secs.toFixed(1) + ' s of listening.' : '');
+    }
+  }
+  $('mic').onclick = function () {
+    mic = new CC.audio.Mic(rx); t0 = performance.now();
+    mic.start().then(function (rate) { $('stat').textContent = 'Listening (' + rate + ' Hz)...'; timer = setInterval(update, 300); },
+      function (e) { $('stat').textContent = 'Microphone unavailable: ' + e.message; });
+  };
+  $('stopmic').onclick = function () { if (mic) mic.stop(); if (timer) clearInterval(timer); };
+  $('rec').onchange = function () {
+    var f = this.files[0]; if (!f) return;
+    $('stat').textContent = 'Decoding ' + f.name + '...';
+    f.arrayBuffer().then(function (b) { return CC.audio.decodeFile(b, rx); }).then(function () {
+      update(); if (!rx.rx.result) $('stat').textContent += ' - not enough frames in this recording.';
+    }, function (e) { $('stat').textContent = 'Cannot read audio: ' + e.message; });
+  };
+  function prep() {
+    if (!sendBytes) return;
+    sig = CC.audio.modulate(sendBytes, { mode: $('mode').value, repair: +$('rep').value });
+    $('sinfo').textContent = CC.ui.fmt(sendBytes.length) + ' -> ' + (sig.length / CC.audio.FS).toFixed(1) + ' s of sound.';
+    $('play').disabled = $('save').disabled = false;
+  }
+  $('file').onchange = function () { if (this.files[0]) CC.ui.readFile(this.files[0]).then(function (b) { sendBytes = b; prep(); }); };
+  $('mode').onchange = $('rep').onchange = prep;
+  $('play').onclick = function () {
+    var AC = window.AudioContext || window.webkitAudioContext, ctx;
+    try { ctx = new AC({ sampleRate: CC.audio.FS }); } catch (e) { ctx = new AC(); }
+    var buf = ctx.createBuffer(1, sig.length, CC.audio.FS); buf.getChannelData(0).set(sig);
+    var src = ctx.createBufferSource(); src.buffer = buf; src.connect(ctx.destination); src.start();
+  };
+  $('save').onclick = function () { CC.ui.save(CC.audio.wav(sig), 'crush-archive.wav'); };
+  CC.sendAudio = function (b, opts) { sendBytes = b; if (opts && opts.mode) $('mode').value = opts.mode; prep(); };
+})();
+</script>
+</body></html>

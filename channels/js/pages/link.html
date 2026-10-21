@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="referrer" content="no-referrer">
+<title>Crush Link</title>
+<style>/*INLINE:src/style.css*/
+textarea{width:100%;height:7em;font:12px ui-monospace,Consolas,monospace;background:var(--bg);color:var(--fg);border:1px solid var(--line);border-radius:6px}
+</style></head>
+<body><main>
+<h1>Crush archive in a link</h1>
+<div class="card" id="rx"><div class="mut" id="stat">This page carries no archive. Make a link below.</div><div id="result"></div></div>
+<div class="card">
+  <p class="mut">The archive travels inside the part of the link after "#". Browsers never send that part to the server hosting this page, but anyone who sees the whole link (the messenger, link previews, your browser history) sees the archive: encrypt it in Crush first if that matters. Keep links under about 4,000 characters for chat apps; see the size notes in the report.</p>
+  <input type="file" id="file">
+  <textarea id="out" readonly placeholder="link appears here"></textarea>
+  <button id="copy" class="sec" disabled>Copy link</button><span class="mut" id="len"></span>
+</div>
+</main>
+<script>/*INLINE:src/core.js*/</script>
+<script>/*INLINE:src/ui.js*/</script>
+<script>
+(function () {
+  var CC = CrushChannels, core = CC.core, $ = function (i) { return document.getElementById(i); };
+  var PREFIX = 'C1.', MAX = 2 * 1024 * 1024;
+  CC.link = {
+    make: function (bytes, base) {
+      var blob = new Uint8Array(bytes.length + 32); blob.set(bytes); blob.set(core.sha256(bytes), bytes.length);
+      return (base || location.href).split('#')[0] + '#' + PREFIX + core.b64uEncode(blob);
+    },
+    read: function (frag) {
+      frag = frag.charAt(0) === '#' ? frag.slice(1) : frag;
+      if (frag.slice(0, PREFIX.length) !== PREFIX) return { error: 'not a Crush link' };
+      if (frag.length > MAX) return { error: 'link too long' };
+      var b = core.b64uDecode(frag.slice(PREFIX.length).replace(/\s+/g, ''));
+      if (!b || b.length < 32) return { error: 'the link is damaged or cut short' };
+      var data = b.slice(0, b.length - 32), h = core.sha256(data);
+      for (var i = 0; i < 32; i++) if (h[i] !== b[b.length - 32 + i]) return { error: 'SHA-256 mismatch: the link is damaged or cut short' };
+      return { bytes: data, sha256: core.hex(h) };
+    }
+  };
+  function load() {
+    if (!location.hash || location.hash.length < 2) return;
+    var r = CC.link.read(location.hash);
+    if (r.error) { $('stat').className = 'cc-err'; $('stat').textContent = r.error + ' (' + location.hash.length + ' characters received).'; return; }
+    $('stat').textContent = '';
+    CC.ui.showResult($('result'), r.bytes, r.sha256, 'link');
+  }
+  window.addEventListener('hashchange', load); load();
+  $('file').onchange = function () {
+    var f = this.files[0]; if (!f) return;
+    CC.ui.readFile(f).then(function (b) {
+      var url = CC.link.make(b);
+      $('out').value = url; $('copy').disabled = false;
+      $('len').textContent = ' ' + url.length.toLocaleString() + ' characters' + (url.length > 32000 ? ' - too long for most chat apps' : url.length > 4000 ? ' - too long for some chat apps' : '');
+    });
+  };
+  $('copy').onclick = function () { navigator.clipboard.writeText($('out').value).catch(function () { $('out').select(); document.execCommand('copy'); }); };
+})();
+</script>
+</body></html>

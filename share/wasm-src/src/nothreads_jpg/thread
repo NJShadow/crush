@@ -1,0 +1,28 @@
+// Single-threaded stand-ins for what crushjpg / jcm v2 name from <thread>,
+// <mutex> and <condition_variable>. zig's libc++ for wasm32-wasi is built
+// without threads. jcm only starts threads when asked for more than one
+// (parallel_for with threads <= 1 runs every job inline, in order), and the
+// WebAssembly glue always asks for one, so none of these is ever contended.
+// LumaSync::wait_row's predicate is always already true when run in order.
+#pragma once
+#include <cstdlib>
+#include <__config>
+#include <__mutex/lock_guard.h>
+#include <__mutex/unique_lock.h>
+namespace std {
+struct thread {
+  thread() {}
+  template <class F> explicit thread(F&&) { abort(); }   // never reached
+  bool joinable() const { return false; }
+  void join() {}
+  static unsigned hardware_concurrency() { return 1; }
+};
+#if !_LIBCPP_HAS_THREADS
+struct mutex { void lock() {} void unlock() {} bool try_lock() { return true; } };
+struct condition_variable {
+  void notify_one() {}
+  void notify_all() {}
+  template <class L, class P> void wait(L&, P pred) { if (!pred()) abort(); }
+};
+#endif
+}  // namespace std

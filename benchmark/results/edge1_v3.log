@@ -1,0 +1,14 @@
+Building adversarial input set...
+  429 files, 10,109,825 bytes across 16 adversarial cases
+
+  quick      harder=False   10,109,825 ->  3,636,501 ( 36.0%)     0.7s   ALL BYTE-EXACT
+  balanced   harder=False   10,109,825 ->  3,604,376 ( 35.7%)     3.9s   ALL BYTE-EXACT
+  crush      harder=False   10,109,825 ->  3,604,200 ( 35.7%)    14.3s   ALL BYTE-EXACT
+  crush      harder=True    10,109,825 ->  3,604,199 ( 35.7%)    13.6s   ALL BYTE-EXACT
+
+--- never-inflate check (the guarantee that matters on bad input) ---
+  random.bin                  2,000,000 ->  2,000,377  overhead +377 bytes (+0.019%)
+  nested.crush                      387 ->        710  overhead +323 bytes (+83.463%)
+  high_entropy_text.txt       1,000,000 ->    500,450  overhead -499,550 bytes (-49.955%)
+
+4/4 configurations fully byte-exact

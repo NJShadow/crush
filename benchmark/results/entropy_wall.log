@@ -1,0 +1,88 @@
+==============================================================================
+TEST 1 - THE COUNTING ARGUMENT (pigeonhole principle)
+==============================================================================
+Claim under test: 'a good enough algorithm could shrink any file'.
+Method: compress 4,000 independent random 256-byte strings with the five
+strongest general-purpose codecs available, keeping the best result each time.
+
+  Strings compressed        : 4,000
+  Strings that got SMALLER  : 0  (0.000%)
+  Total input               : 1,024,000 bytes
+  Total output (best-of-5)  : 1,064,000 bytes
+  Net result                : +3.91%  <- compression EXPANDED the data
+
+  Why this can never be beaten:
+  There are 2^2048 possible 256-byte strings but only 2^2048 - 1 shorter strings.
+  Any injective (reversible) map must therefore leave at least one input un-shrunk.
+  Extended: at most 1/256 of inputs can shrink by even one byte, at most 1/65536
+  by two bytes. Compression is a redistribution of length, never a net reduction.
+
+==============================================================================
+TEST 2 - RECURSIVE COMPRESSION (the 'infinite squeeze' claim)
+==============================================================================
+Claim under test: 'feed the output back in and keep shrinking'.
+Method: take real text, compress, then re-compress the output 12 times.
+
+  pass  0 (original)    2,000,000 B
+  pass  1                188,092 B   -1,811,908 vs previous
+  pass  2                188,164 B   +72 vs previous
+  pass  3                188,236 B   +72 vs previous
+  pass  4                188,308 B   +72 vs previous
+  pass  5                188,380 B   +72 vs previous
+  pass  6                188,452 B   +72 vs previous
+  pass  7                188,524 B   +72 vs previous
+  pass  8                188,588 B   +64 vs previous
+  pass  9                188,660 B   +72 vs previous
+  pass 10                188,732 B   +72 vs previous
+  pass 11                188,804 B   +72 vs previous
+  pass 12                188,876 B   +72 vs previous
+
+  First pass:  -90.6%   (real structure removed)
+  Passes 2-12: +0.417%   (output is now incompressible; only overhead accrues)
+
+==============================================================================
+TEST 3 - HOW FAR ARE REAL FILES FROM *THEIR OWN* ENTROPY FLOOR?
+==============================================================================
+This is the number that matters. The wall is real, but real files sit nowhere
+near it. Empirical order-N entropy vs what today's best codecs actually achieve.
+
+  file                           o0     o1     o2     o3 |    xz -9e   zstd19    br 11
+  ----------------------------------------------------------------------------
+  text_english.txt             5.16   3.75   2.45   1.44 |     0.791    0.821    0.747
+  code_python.py               4.66   3.50   2.42   1.62 |     1.564    1.600    1.533
+  data_xml.xml                 5.35   3.05   1.57   0.90 |     0.839    0.909    0.803
+  data_records.json            4.65   2.52   1.42   1.11 |     0.914    0.923    0.893
+  data_records.csv             5.05   3.40   2.40   2.07 |     2.280    2.325    2.234
+
+  Read this carefully: the best codecs already beat order-3 entropy, because they
+  model far longer contexts. Order-N estimates are an upper bound, not the floor.
+  The true floor (Kolmogorov complexity) is UNCOMPUTABLE - which means nobody,
+  including the market leaders, can prove they are near it. That unprovable gap
+  is the entire commercial opportunity.
+
+==============================================================================
+TEST 4 - SIZING THE REAL OPPORTUNITY
+==============================================================================
+If the wall can't move, where does a better product come from? Two places.
+
+  (a) STRUCTURE THE GENERAL-PURPOSE CODECS CANNOT SEE
+      A .docx / .xlsx / .zip / .apk is a container of DEFLATE streams. To a
+      byte-oriented compressor it looks like noise. Unwrap it first:
+
+      office_sheet.xlsx          934,443 B  -> xz direct   880,464 ( 94.2%)  -> unwrapped   531,592 ( 56.9%)   gain  39.6%
+      container_wheel.zip      7,233,653 B  -> xz direct 7,220,208 ( 99.8%)  -> unwrapped 3,805,096 ( 52.6%)   gain  47.3%
+      office_report.docx          45,763 B  -> xz direct    45,496 ( 99.4%)  -> unwrapped    31,032 ( 67.8%)   gain  31.8%
+
+  (b) NUMERIC LAYOUT THE CODECS CANNOT SEE
+      Float/int arrays are byte-interleaved. Transpose them and the exponent
+      bytes line up into a highly repetitive plane:
+
+      data_floats.bin          7,200,000 B  -> xz direct 5,576,656 ( 77.5%)  -> shuffled 5,267,188 ( 73.2%)
+      data_timeseries.bin      8,000,000 B  -> xz direct 1,103,940 ( 13.8%)  -> shuffled 1,020,920 ( 12.8%)  -> delta+shuffle 1,032,652 ( 12.9%)
+      image_raw16.bin          2,880,000 B  -> xz direct 2,203,304 ( 76.5%)  -> shuffled 2,116,328 ( 73.5%)  -> delta+shuffle 2,396,684 ( 83.2%)
+
+==============================================================================
+CONCLUSION: the wall is real and immovable. The gap between the wall and where
+today's mainstream tools actually stop is large, exploitable, and is where Crush
+will live. No physics was harmed in the making of this compressor.
+==============================================================================

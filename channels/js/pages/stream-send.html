@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Crush QR Stream</title>
+<style>/*INLINE:src/style.css*/
+#stage{background:#fff;display:flex;justify-content:center;padding:12px;border-radius:10px}
+#qr{image-rendering:pixelated;width:min(92vw,78vh);height:min(92vw,78vh)}
+body.full main>*:not(#stagewrap){display:none}body.full #qr{width:min(98vw,96vh);height:min(98vw,96vh)}body.full main{max-width:none}
+</style></head>
+<body><main>
+<h1>Send a Crush archive as a QR stream</h1>
+<p class="mut">Point the receiving device's camera at the codes below (open the Crush QR receiver page there). The codes never repeat a useful packet: the receiver can start at any moment, miss any frames, and still finishes as soon as it has caught enough of them. Everything runs in this page; nothing is uploaded.</p>
+<div class="card" id="pick">
+  <div class="drop" id="drop">Drop a .crush file here, or <input type="file" id="file"></div>
+</div>
+<div class="card">
+  <label>QR version <select id="ver"><option>10</option><option>15</option><option selected>20</option><option>25</option><option>30</option></select></label>
+  <label>Error correction <select id="ecl"><option value="l" selected>L (7%)</option><option value="m">M (15%)</option></select></label>
+  <label>Codes per second <input id="rate" type="number" min="1" max="30" value="8" style="width:4em"></label>
+  <div class="mut" id="info">No file loaded.</div>
+  <button id="go" disabled>Start</button><button id="stop" class="sec">Stop</button><button id="full" class="sec">Full screen</button>
+</div>
+<div id="stagewrap"><div id="stage"><canvas id="qr" class="view" width="1" height="1"></canvas></div>
+<div class="mut" id="ctr"></div></div>
+</main>
+<script>/*INLINE:src/core.js*/</script>
+<script>/*INLINE:vendor/qrcodegen.js*/</script>
+<script>/*INLINE:src/qrstream.js*/</script>
+<script>/*INLINE:src/ui.js*/</script>
+<script>
+(function () {
+  var CC = CrushChannels, bytes = null, sender = null, $ = function (i) { return document.getElementById(i); };
+  function info() {
+    if (!bytes) return;
+    var v = +$('ver').value, e = $('ecl').value, T = CC.qr.symbolSize(v, e), lay = CC.core.layout(bytes.length, T);
+    var r = +$('rate').value || 8;
+    $('info').textContent = CC.ui.fmt(bytes.length) + ' archive - ' + lay.ktot + ' source packets of ' + T + ' B (' + lay.B + ' block' + (lay.B > 1 ? 's' : '') +
+      '). With no frames missed the receiver needs about ' + Math.ceil(lay.ktot / r) + ' s at ' + r + ' codes/s; with 30% missed about ' + Math.ceil(lay.ktot / 0.7 / r) + ' s.';
+  }
+  function load(b, name) { bytes = b; $('go').disabled = false; info(); }
+  $('file').onchange = function () { if (this.files[0]) CC.ui.readFile(this.files[0]).then(load); };
+  var dz = $('drop');
+  dz.ondragover = function (e) { e.preventDefault(); };
+  dz.ondrop = function (e) { e.preventDefault(); if (e.dataTransfer.files[0]) CC.ui.readFile(e.dataTransfer.files[0]).then(load); };
+  ['ver', 'ecl', 'rate'].forEach(function (i) { $(i).onchange = function () { info(); if (sender) start(); }; });
+  function start() {
+    if (sender) sender.stop();
+    sender = new CC.stream.Sender($('qr'), bytes, { version: +$('ver').value, ecl: $('ecl').value, rate: +$('rate').value || 8,
+      onframe: function (n, s) { $('ctr').textContent = 'frame ' + n + (n < s.enc.ktot ? ' (source)' : ' (repair)'); } });
+    sender.start();
+  }
+  $('go').onclick = start;
+  $('stop').onclick = function () { if (sender) sender.stop(); };
+  $('full').onclick = function () { document.body.classList.toggle('full'); if (document.body.requestFullscreen && document.body.classList.contains('full')) document.body.requestFullscreen().catch(function () {}); };
+  document.addEventListener('keydown', function (e) { if (e.key === 'Escape') document.body.classList.remove('full'); });
+  // host pages (e.g. the share package) can call this with the archive bytes
+  CC.sendStream = function (b, opts) { load(b); if (opts) { if (opts.version) $('ver').value = opts.version; if (opts.ecl) $('ecl').value = opts.ecl; if (opts.rate) $('rate').value = opts.rate; info(); } start(); };
+})();
+</script>
+</body></html>

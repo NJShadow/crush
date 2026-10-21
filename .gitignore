@@ -1,0 +1,24 @@
+__pycache__/
+*.pyc
+crush-debug.log
+/dist/
+/build/
+Crush.spec
+.deps-ok
+# generated benchmark corpora (rebuild with benchmark/build_corpus*.py)
+/corpus/
+/corpus2/
+/results/
+share/work/
+# Linux builds of the helpers (build.sh makes them; only Windows builds ship)
+engine/crushcm
+engine/crushjpg
+engine/crushjpg_asan
+engine/crushpf
+engine/crushnn
+engine/crushnn_asan
+engine/libcrushz.so
+# scratch names Crush itself uses; never left behind, but never committed either
+.crush-*
+# personal
+Claude outputs/

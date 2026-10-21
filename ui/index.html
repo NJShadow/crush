@@ -1,0 +1,1356 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Crush</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0' stop-color='%23FFB020'/%3E%3Cstop offset='.55' stop-color='%23FF5C39'/%3E%3Cstop offset='1' stop-color='%23F2447B'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='32' height='32' rx='8' fill='url(%23g)'/%3E%3Cpath d='M9 9h14M11 16h10M13 23h6' stroke='%230E1014' stroke-width='3' stroke-linecap='round'/%3E%3C/svg%3E">
+<style>
+:root{
+  --bg:#0C0E12; --bg2:#12151B; --panel:#171B22; --panel2:#1D222B;
+  --line:#262C37; --line2:#333B49;
+  --ink:#EDF0F5; --ink2:#98A2B3; --ink3:#646E7E;
+  --hot1:#FFB020; --hot2:#FF5C39; --hot3:#F2447B;
+  --good:#34D399; --info:#60A5FA;
+  --r:14px;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{
+  background:
+    radial-gradient(1100px 620px at 78% -12%, rgba(255,92,57,.13), transparent 62%),
+    radial-gradient(900px 520px at 8% 108%, rgba(242,68,123,.10), transparent 60%),
+    var(--bg);
+  color:var(--ink);
+  font:14px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Roboto,Helvetica,Arial,sans-serif;
+  -webkit-font-smoothing:antialiased; overflow:hidden; user-select:none;
+}
+button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
+::-webkit-scrollbar{width:10px;height:10px}
+::-webkit-scrollbar-thumb{background:#2A313D;border-radius:6px;border:2px solid var(--bg)}
+::-webkit-scrollbar-thumb:hover{background:#3A4352}
+::-webkit-scrollbar-track{background:transparent}
+
+/* ---------- shell ---------- */
+.app{display:flex;flex-direction:column;height:100vh}
+.top{
+  display:flex;align-items:center;gap:14px;padding:16px 22px;
+  border-bottom:1px solid var(--line); background:rgba(12,14,18,.72); backdrop-filter:blur(14px);
+  -webkit-app-region:drag; flex:0 0 auto;
+}
+.logo{display:flex;align-items:center;gap:11px}
+.mark{
+  width:30px;height:30px;border-radius:9px;position:relative;flex:0 0 auto;
+  background:linear-gradient(145deg,var(--hot1),var(--hot2) 55%,var(--hot3));
+  box-shadow:0 4px 18px rgba(255,92,57,.34);
+  display:grid;place-items:center;
+}
+.mark:before{content:"";width:13px;height:3px;border-radius:2px;background:#0C0E12;
+  box-shadow:0 -5px 0 rgba(12,14,18,.55), 0 5px 0 rgba(12,14,18,.55)}
+.wordmark{font-size:17px;font-weight:700;letter-spacing:-.02em}
+.wordmark span{
+  background:linear-gradient(100deg,var(--hot1),var(--hot2) 60%,var(--hot3));
+  -webkit-background-clip:text;background-clip:text;color:transparent;
+}
+.tag{font-size:11px;color:var(--ink3);letter-spacing:.06em;text-transform:uppercase;margin-top:1px}
+.spacer{flex:1}
+.navbtn{
+  -webkit-app-region:no-drag;
+  padding:7px 13px;border-radius:9px;color:var(--ink2);font-size:13px;font-weight:500;
+  border:1px solid transparent;transition:.16s;
+}
+.navbtn:hover{color:var(--ink);background:var(--panel)}
+.navbtn.on{color:var(--ink);background:var(--panel);border-color:var(--line2)}
+
+.body{flex:1;overflow:auto;padding:26px 22px 32px}
+.wrap{max-width:1000px;margin:0 auto}
+.view{display:none}
+.view.on{display:block;animation:fade .28s ease}
+@keyframes fade{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+
+/* ---------- drop zone ---------- */
+.hero{text-align:center;padding:22px 0 4px}
+.hero h1{font-size:30px;font-weight:700;letter-spacing:-.03em;margin-bottom:8px}
+.hero p{color:var(--ink2);font-size:14.5px;max-width:560px;margin:0 auto}
+.drop{
+  margin:26px 0 18px;border:2px dashed var(--line2);border-radius:20px;
+  padding:52px 28px;text-align:center;transition:.2s;
+  background:linear-gradient(180deg,rgba(255,255,255,.018),transparent);
+}
+.drop.hot{border-color:var(--hot2);background:rgba(255,92,57,.07);transform:scale(1.005)}
+.drop .big{font-size:17px;font-weight:600;margin-bottom:6px}
+.drop .sub{color:var(--ink3);font-size:13px;margin-bottom:20px}
+.row{display:flex;gap:10px;justify-content:center;flex-wrap:wrap}
+.btn{
+  padding:10px 18px;border-radius:10px;border:1px solid var(--line2);
+  background:var(--panel);font-size:13.5px;font-weight:550;transition:.16s;
+}
+.btn:hover{background:var(--panel2);border-color:#414B5C;transform:translateY(-1px)}
+.btn.primary{
+  border:none;color:#1A0E06;font-weight:700;
+  background:linear-gradient(100deg,var(--hot1),var(--hot2) 62%,var(--hot3));
+  box-shadow:0 6px 22px rgba(255,92,57,.30);
+}
+.btn.primary:hover{box-shadow:0 9px 30px rgba(255,92,57,.42)}
+.btn.primary:disabled{opacity:.4;box-shadow:none;cursor:not-allowed;transform:none}
+.btn.ghost{background:transparent}
+
+/* ---------- panels ---------- */
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);overflow:hidden}
+.panel + .panel{margin-top:16px}
+.ph{padding:14px 18px;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:10px}
+.ph h3{font-size:13px;font-weight:650;letter-spacing:.01em}
+.ph .hint{color:var(--ink3);font-size:12px;margin-left:auto}
+.pb{padding:6px 0}
+
+.item{display:flex;align-items:center;gap:12px;padding:11px 18px;border-bottom:1px solid rgba(38,44,55,.5)}
+.item:last-child{border-bottom:none}
+.item.pickable{cursor:pointer;user-select:none}
+.item.pickable:hover{background:rgba(255,255,255,.028)}
+.ck{appearance:none;-webkit-appearance:none;width:16px;height:16px;flex:0 0 16px;
+  border:1.5px solid var(--line2);border-radius:4px;background:transparent;cursor:pointer;
+  position:relative;transition:.12s}
+.ck:hover{border-color:var(--hot2)}
+.ck:checked{background:var(--hot2);border-color:var(--hot2)}
+.ck:checked::after{content:"";position:absolute;left:4.5px;top:1px;width:4px;height:9px;
+  border:solid #0E1014;border-width:0 2px 2px 0;transform:rotate(42deg)}
+/* ---------- encryption ---------- */
+.pwgrid{display:grid;grid-template-columns:118px 1fr;gap:12px 14px;align-items:center;
+  padding:18px 20px 4px}
+.pwlab{color:var(--ink2);font-size:13px}
+.pwrow{display:flex;gap:8px;align-items:center}
+.pwbox{flex:1;min-width:0;background:var(--bg2);color:var(--ink);font-family:inherit;
+  border:1px solid var(--line2);border-radius:9px;padding:10px 13px;font-size:14px;
+  outline:none;letter-spacing:.02em;transition:border-color .14s}
+.pwbox:focus{border-color:var(--hot2)}
+.pwbox::placeholder{color:var(--ink3);letter-spacing:0}
+.pwbox.mismatch{border-color:#EF4444}
+.meter{height:5px;border-radius:3px;background:var(--bg2);overflow:hidden;
+  border:1px solid var(--line)}
+.meter i{display:block;height:100%;width:0;border-radius:3px;transition:width .25s,background .25s}
+.pwnote{color:var(--ink3);font-size:12.5px;margin-top:7px;line-height:1.5}
+.pwnote b{color:var(--ink2)}
+.kdfrow{display:flex;gap:8px;flex-wrap:wrap}
+.kdf{flex:1 1 0;min-width:104px;background:var(--panel2);border:1px solid var(--line2);
+  border-radius:10px;padding:9px 10px;cursor:pointer;color:var(--ink2);font-family:inherit;
+  text-align:left;transition:.14s}
+.kdf:hover{border-color:var(--ink3)}
+.kdf.on{border-color:var(--hot2);background:rgba(255,92,57,.09);color:var(--ink)}
+.kdf b{display:block;font-size:13px;font-weight:600}
+.kdf small{display:block;color:var(--ink3);font-size:11.5px;margin-top:2px}
+.fineprint{margin-top:11px;padding-top:11px;border-top:1px solid var(--line);
+  color:var(--ink3);font-size:12px;line-height:1.55}
+.lockwrap{max-width:520px;margin:6px auto 0;text-align:center}
+.lockicon{width:56px;height:56px;margin:0 auto 18px;border-radius:16px;
+  background:linear-gradient(145deg,var(--hot1),var(--hot2) 55%,var(--hot3));
+  display:flex;align-items:center;justify-content:center}
+.lockicon svg{width:28px;height:28px}
+.lockwrap h2{font-size:22px;font-weight:650;letter-spacing:-.01em;margin-bottom:8px}
+.lockwrap p{color:var(--ink2);font-size:14px;line-height:1.6;margin-bottom:22px}
+.lockform{display:flex;gap:8px;margin-bottom:12px}
+.lockerr{color:#FCA5A5;font-size:13px;min-height:19px;margin-bottom:6px}
+.lockmeta{color:var(--ink3);font-size:12px;line-height:1.6}
+.pill.lock{background:rgba(255,176,32,.12);border-color:rgba(255,176,32,.35);color:#FFD08A}
+.qbox{flex:1 1 220px;min-width:140px;background:var(--bg2);color:var(--ink);
+  border:1px solid var(--line2);border-radius:8px;padding:7px 11px;font-size:13px;
+  font-family:inherit;outline:none}
+.qbox:focus{border-color:var(--hot2)}
+.qbox::placeholder{color:var(--ink3)}
+.chip{
+  width:30px;height:30px;border-radius:8px;flex:0 0 auto;display:grid;place-items:center;
+  font-size:11px;font-weight:800;letter-spacing:-.02em;color:#0C0E12;
+}
+.iname{flex:1;min-width:0;font-size:13.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.imeta{color:var(--ink3);font-size:12px;font-variant-numeric:tabular-nums}
+.x{color:var(--ink3);padding:4px 7px;border-radius:6px;font-size:15px;line-height:1}
+.x:hover{color:var(--hot2);background:rgba(255,92,57,.10)}
+
+/* ---------- type breakdown ---------- */
+.tline{display:flex;align-items:center;gap:12px;padding:10px 18px}
+.tbar{flex:1;height:6px;border-radius:3px;background:var(--panel2);overflow:hidden}
+.tbar i{display:block;height:100%;border-radius:3px;background:linear-gradient(90deg,var(--hot1),var(--hot2))}
+.tname{width:172px;font-size:13px;flex:0 0 auto;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tplan{color:var(--ink3);font-size:11.5px;padding:0 18px 11px 208px;margin-top:-6px}
+.tsize{width:82px;text-align:right;color:var(--ink2);font-size:12px;font-variant-numeric:tabular-nums;flex:0 0 auto}
+
+/* ---------- tiers ---------- */
+.tiers{display:grid;grid-template-columns:repeat(auto-fit,minmax(165px,1fr));gap:10px;padding:14px 18px}
+.tier{
+  border:1px solid var(--line);border-radius:11px;padding:13px 13px 12px;cursor:pointer;
+  transition:.16s;background:var(--bg2);
+}
+.tier:hover{border-color:var(--line2);transform:translateY(-1px)}
+.tier.on{border-color:var(--hot2);background:rgba(255,92,57,.08);
+  box-shadow:inset 0 0 0 1px rgba(255,92,57,.30)}
+.tier b{display:block;font-size:13.5px;margin-bottom:3px}
+.tier small{color:var(--ink3);font-size:11.5px;line-height:1.4;display:block}
+.tier .speed{margin-top:8px;display:flex;gap:3px}
+.tier .speed i{width:15px;height:3px;border-radius:2px;background:var(--line2)}
+.tier.on .speed i.f{background:var(--hot2)}
+.tier .speed i.f{background:var(--ink3)}
+
+.toggle{display:flex;align-items:flex-start;gap:12px;padding:14px 18px;border-top:1px solid var(--line)}
+.sw{
+  width:38px;height:22px;border-radius:11px;background:var(--line2);position:relative;
+  flex:0 0 auto;cursor:pointer;transition:.18s;margin-top:1px;
+}
+.sw:after{content:"";position:absolute;top:3px;left:3px;width:16px;height:16px;border-radius:50%;
+  background:var(--ink);transition:.18s}
+.sw.on{background:linear-gradient(100deg,var(--hot1),var(--hot2))}
+.sw.on:after{left:19px;background:#0C0E12}
+.toggle .tx b{font-size:13px;display:block;margin-bottom:2px}
+.toggle .tx small{color:var(--ink3);font-size:12px;line-height:1.5}
+
+/* ---------- progress ---------- */
+.progwrap{text-align:center;padding:70px 20px}
+.pulse{
+  width:74px;height:74px;margin:0 auto 26px;border-radius:20px;
+  background:linear-gradient(145deg,var(--hot1),var(--hot2) 55%,var(--hot3));
+  animation:squeeze 1.25s ease-in-out infinite;
+  box-shadow:0 10px 40px rgba(255,92,57,.34);
+}
+@keyframes squeeze{
+  0%,100%{transform:scaleX(1) scaleY(1);border-radius:20px}
+  50%{transform:scaleX(.52) scaleY(1.1);border-radius:12px}
+}
+.pstage{font-size:16px;font-weight:600;margin-bottom:6px}
+.pname{color:var(--ink3);font-size:13px;height:19px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:520px;margin:0 auto}
+.ptrack{max-width:420px;height:5px;border-radius:3px;background:var(--panel2);margin:22px auto 0;overflow:hidden}
+.ptrack i{display:block;height:100%;background:linear-gradient(90deg,var(--hot1),var(--hot3));transition:width .3s}
+
+/* ---------- share ---------- */
+.sharerow{display:flex;gap:14px;align-items:center;margin:0 0 10px}
+.sharerow .btn{min-width:178px;flex:none}
+.sharerow span{color:var(--ink3);font-size:12.5px}
+@media (max-width:640px){.sharerow{flex-direction:column;align-items:stretch}.sharerow .btn{min-width:0}}
+/* ---------- result ---------- */
+.result{text-align:center;padding:12px 0 26px}
+.bignum{
+  font-size:78px;font-weight:800;letter-spacing:-.045em;line-height:1;
+  background:linear-gradient(100deg,var(--hot1),var(--hot2) 55%,var(--hot3));
+  -webkit-background-clip:text;background-clip:text;color:transparent;
+}
+.bigsub{color:var(--ink2);font-size:15px;margin-top:8px}
+.sizes{display:flex;align-items:center;justify-content:center;gap:16px;margin-top:22px;font-variant-numeric:tabular-nums}
+.sizes .s1{font-size:15px;color:var(--ink3);text-decoration:line-through}
+.sizes .arr{color:var(--hot2);font-size:17px}
+.sizes .s2{font-size:22px;font-weight:700}
+.cmpbar{max-width:560px;margin:24px auto 0}
+.cmprow{display:flex;align-items:center;gap:11px;margin-bottom:9px}
+.cmpname{width:96px;text-align:right;font-size:12px;color:var(--ink2);flex:0 0 auto}
+.cmptrack{flex:1;height:22px;border-radius:6px;background:var(--panel2);overflow:hidden;position:relative}
+.cmptrack i{display:block;height:100%;border-radius:6px;background:var(--line2);transition:width .8s cubic-bezier(.2,.8,.2,1)}
+.cmprow.me .cmptrack i{background:linear-gradient(90deg,var(--hot1),var(--hot2))}
+.cmprow.me .cmpname{color:var(--ink);font-weight:650}
+.cmpval{width:82px;font-size:12px;color:var(--ink2);font-variant-numeric:tabular-nums;flex:0 0 auto}
+
+table{width:100%;border-collapse:collapse;font-size:13px}
+th{text-align:left;color:var(--ink3);font-weight:550;font-size:11.5px;letter-spacing:.04em;
+   text-transform:uppercase;padding:11px 18px;border-bottom:1px solid var(--line)}
+td{padding:11px 18px;border-bottom:1px solid rgba(38,44,55,.45);vertical-align:top}
+tr:last-child td{border-bottom:none}
+td.num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+.pill{display:inline-block;padding:2px 8px;border-radius:20px;font-size:11px;
+  background:var(--panel2);color:var(--ink2);border:1px solid var(--line);margin:1px 3px 1px 0}
+.pill.hot{background:rgba(255,92,57,.13);border-color:rgba(255,92,57,.32);color:#FFB08A}
+.pill.good{background:rgba(52,211,153,.11);border-color:rgba(52,211,153,.3);color:#6EE7B7}
+.pct{font-weight:650}
+.note{padding:13px 18px;color:var(--ink3);font-size:12.5px;line-height:1.6;border-top:1px solid var(--line)}
+.note b{color:var(--ink2);font-weight:600}
+
+.cap{display:flex;align-items:flex-start;gap:12px;padding:13px 18px;border-bottom:1px solid rgba(38,44,55,.45)}
+.cap:last-child{border-bottom:none}
+.dot{width:8px;height:8px;border-radius:50%;margin-top:6px;flex:0 0 auto;background:var(--line2)}
+.dot.ok{background:var(--good);box-shadow:0 0 8px rgba(52,211,153,.5)}
+.cap b{font-size:13px;display:block}
+.cap small{color:var(--ink3);font-size:12px;display:block;margin-top:1px}
+.cap .st{margin-left:auto;font-size:11.5px;color:var(--ink3);white-space:nowrap;padding-top:2px}
+
+.empty{text-align:center;padding:48px 20px;color:var(--ink3);font-size:13.5px}
+.pline{display:flex;align-items:center;gap:12px;padding:12px 18px;border-top:1px solid var(--line)}
+.pline .tx{flex:1;min-width:0}
+.pline .tx b{font-size:13px;display:block;margin-bottom:2px}
+.pline .tx small{color:var(--ink3);font-size:11.5px;line-height:1.5;display:block}
+.pline input[type=range]{width:150px;accent-color:var(--hot2)}
+.pline .val{font-family:ui-monospace,Consolas,monospace;font-size:12px;color:var(--ink2);width:64px;text-align:right}
+.warnbox{margin:0 18px 14px;padding:11px 13px;border-radius:9px;font-size:12px;line-height:1.55;
+  background:rgba(255,176,32,.09);border:1px solid rgba(255,176,32,.28);color:#FFD79A}
+.hl{display:flex;gap:12px;align-items:flex-start;padding:11px 18px;border-bottom:1px solid rgba(38,44,55,.45)}
+.hl:last-child{border-bottom:none}
+.hlk{font-size:10px;font-weight:800;letter-spacing:.06em;padding:3px 7px;border-radius:5px;
+  text-transform:uppercase;flex:0 0 auto;margin-top:1px}
+.hlk.oracle{background:rgba(255,176,32,.16);color:#FFC864;border:1px solid rgba(255,176,32,.3)}
+.hlk.prism{background:rgba(96,165,250,.14);color:#93C5FD;border:1px solid rgba(96,165,250,.3)}
+.hlk.perceptual{background:rgba(242,68,123,.14);color:#F9A8C4;border:1px solid rgba(242,68,123,.3)}
+.hl .n{flex:1;min-width:0;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.hl .d{color:var(--ink3);font-size:11.5px;margin-top:2px}
+.hl .s{font-size:12px;color:var(--ink2);font-variant-numeric:tabular-nums;white-space:nowrap}
+.err{background:rgba(242,68,123,.09);border:1px solid rgba(242,68,123,.3);color:#F9A8C4;
+  padding:13px 16px;border-radius:11px;font-size:12.5px;white-space:pre-wrap;margin-bottom:14px;
+  max-height:220px;overflow:auto;font-family:ui-monospace,Menlo,Consolas,monospace}
+.foot{display:flex;gap:10px;justify-content:center;margin-top:22px;flex-wrap:wrap}
+</style>
+</head>
+<body>
+<div id="boot" style="position:fixed;inset:0;z-index:99;display:grid;place-items:center;
+     background:#0C0E12;color:#98A2B3;font:14px -apple-system,'Segoe UI',sans-serif;text-align:center">
+  <div style="max-width:560px;padding:0 24px">
+    <div style="width:46px;height:46px;margin:0 auto 20px;border-radius:13px;
+         background:linear-gradient(145deg,#FFB020,#FF5C39 55%,#F2447B);
+         animation:squeeze 1.25s ease-in-out infinite"></div>
+    <div id="boot-msg" style="font-size:15px;color:#EDF0F5;font-weight:600">Starting Crush…</div>
+    <div id="boot-sub" style="margin-top:8px;font-size:12.5px;line-height:1.6"></div>
+  </div>
+</div>
+
+<div class="app">
+  <div class="top">
+    <div class="logo">
+      <div class="mark"></div>
+      <div>
+        <div class="wordmark"><span>Crush</span></div>
+        <div class="tag">Content-aware compression</div>
+      </div>
+    </div>
+    <div class="spacer"></div>
+    <button class="navbtn on" data-nav="compress">Compress</button>
+    <button class="navbtn" data-nav="open">Open .crush</button>
+    <button class="navbtn" data-nav="engine">Engine</button>
+  </div>
+
+  <div class="body"><div class="wrap">
+
+    <!-- ============ COMPRESS ============ -->
+    <div class="view on" id="v-compress">
+      <div id="stage-drop">
+        <div class="hero">
+          <h1>Make it smaller. Provably.</h1>
+          <p>Crush identifies what each file actually is, applies a reversible transform that
+             exposes its real content, then runs a tournament of codecs and keeps the winner.</p>
+        </div>
+        <div class="drop" id="dz">
+          <div class="big">Drop files or a folder here</div>
+          <div class="sub">Everything stays on this machine</div>
+          <div class="row">
+            <button class="btn" id="b-files">Choose files</button>
+            <button class="btn" id="b-folder">Choose folder</button>
+          </div>
+          <div class="sub" id="dz-status" style="display:none;margin:16px 0 0"></div>
+        </div>
+      </div>
+
+      <div id="stage-ready" style="display:none">
+        <div id="errbox"></div>
+        <div class="panel">
+          <div class="ph"><h3>Selected</h3>
+            <span class="hint" id="qmeta"></span>
+            <button class="navbtn" id="b-add" style="margin-left:10px">Add more</button>
+            <button class="navbtn" id="b-clear">Clear</button>
+          </div>
+          <div class="pb" id="qlist"></div>
+        </div>
+
+        <div class="panel">
+          <div class="ph"><h3>What Crush found</h3><span class="hint">and how it will handle each kind</span></div>
+          <div class="pb" id="breakdown"></div>
+        </div>
+
+        <div class="panel">
+          <div class="ph"><h3>Effort</h3><span class="hint">higher tiers try more codecs and keep the smallest</span></div>
+          <div class="tiers" id="tiers"></div>
+          <div class="toggle">
+            <div class="sw" id="sw-harder"></div>
+            <div class="tx">
+              <b>Crush Harder — rebuild Zip-based containers</b>
+              <small>Zip, Office, APK and JAR files are containers of separately-compressed parts.
+              Rebuilding them instead of preserving their exact bytes typically saves another
+              30–50%. Every file inside is restored bit-for-bit identical and verified by
+              SHA-256; only the container's own packing bytes differ. Off by default.</small>
+            </div>
+          </div>
+        </div>
+
+        <div class="panel" id="p-crypt">
+          <div class="ph"><h3>Encryption</h3>
+            <span class="hint">off by default &mdash; nothing else in Crush needs a passphrase</span></div>
+          <div class="toggle">
+            <div class="sw" id="sw-crypt"></div>
+            <div class="tx">
+              <b>Lock this archive with a passphrase</b>
+              <small id="crypt-suite">Argon2id key stretching, then XChaCha20-Poly1305.
+              File names, sizes, folder structure and contents are all encrypted &mdash;
+              a locked archive cannot even be listed without the passphrase.</small>
+            </div>
+          </div>
+
+          <div id="crypt-body" style="display:none">
+            <div class="pwgrid">
+              <label class="pwlab" for="pw1">Passphrase</label>
+              <div class="pwrow">
+                <input type="password" id="pw1" class="pwbox" autocomplete="new-password"
+                       spellcheck="false" placeholder="Six random words beat one clever word">
+                <button class="navbtn" id="b-pwshow" type="button" title="Show or hide">Show</button>
+                <button class="navbtn" id="b-pwgen" type="button">Suggest</button>
+              </div>
+
+              <label class="pwlab" for="pw2">Confirm</label>
+              <div class="pwrow">
+                <input type="password" id="pw2" class="pwbox" autocomplete="new-password"
+                       spellcheck="false" placeholder="Type it again">
+              </div>
+
+              <div></div>
+              <div>
+                <div class="meter"><i id="pwbar"></i></div>
+                <div class="pwnote" id="pwnote">A passphrase you can remember and nobody can guess.</div>
+              </div>
+
+              <label class="pwlab">Key stretching</label>
+              <div class="kdfrow" id="kdfrow">
+                <button class="kdf" data-kdf="fast" type="button"><b>Fast</b><small>~0.3s · 64 MB</small></button>
+                <button class="kdf on" data-kdf="balanced" type="button"><b>Balanced</b><small>~1s · 256 MB</small></button>
+                <button class="kdf" data-kdf="paranoid" type="button"><b>Paranoid</b><small>~3s · 1 GB</small></button>
+              </div>
+            </div>
+
+            <div class="warnbox" style="margin-top:16px">
+              <b>There is no way to recover a lost passphrase.</b> Not by us, not by you.
+              That is what makes the encryption worth having &mdash; but it means a forgotten
+              passphrase is the same thing as a deleted archive. Write it down somewhere safe
+              before you rely on it.
+              <div class="fineprint">
+                Hidden: every file name, size, timestamp and byte, and the number of files.
+                Not hidden: that this is a Crush archive, and its total size &mdash; from which
+                the compressed size of your data can be read to within a few dozen bytes.
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="ph"><h3>Perceptual tier</h3>
+            <span class="hint">off by default &mdash; this is the only part of Crush that discards anything</span></div>
+          <div class="warnbox">
+            Everything else in Crush is bounded by arithmetic. This tier is not, because it
+            answers a different question: not <i>what are these bytes</i> but <i>what will a
+            person actually see and hear</i>. Crush encodes, decodes and compares every file
+            against the original, and shows you the PSNR and SSIM it measured. Files that miss
+            the quality floor are kept losslessly instead. <b>Originals are not recoverable
+            from a perceptual archive.</b>
+          </div>
+          <div class="pline">
+            <div class="sw" id="sw-photo"></div>
+            <div class="tx"><b>Photographs</b>
+              <small>JPEG and PNG re-coded through JPEG XL. Around 40&ndash;60% off a photo
+              at a distance a person cannot pick out side by side.</small></div>
+            <input type="range" id="r-photo" min="50" max="150" step="25" value="75" disabled>
+            <div class="val" id="v-photo">d 0.75</div>
+          </div>
+          <div class="pline">
+            <div class="sw" id="sw-audio"></div>
+            <div class="tx"><b>Uncompressed audio</b>
+              <small>WAV re-coded to Opus. Restores a WAV of identical format and length,
+              typically at 8&ndash;15% of the original size.</small></div>
+            <input type="range" id="r-audio" min="0" max="3" step="1" value="1" disabled>
+            <div class="val" id="v-audio">128k</div>
+          </div>
+        </div>
+
+        <div class="foot">
+          <button class="btn primary" id="b-go">Crush it</button>
+          <button class="btn ghost" id="b-back">Start over</button>
+        </div>
+      </div>
+
+      <div id="stage-work" style="display:none">
+        <div class="progwrap">
+          <div class="pulse"></div>
+          <div class="pstage" id="pstage">Working</div>
+          <div class="pname" id="pname"></div>
+          <div class="ptrack"><i id="pbar" style="width:0%"></i></div>
+        </div>
+      </div>
+
+      <div id="stage-done" style="display:none">
+        <div class="result">
+          <div class="bignum" id="r-pct">—</div>
+          <div class="bigsub" id="r-sub"></div>
+          <div class="sizes">
+            <span class="s1" id="r-before"></span>
+            <span class="arr">→</span>
+            <span class="s2" id="r-after"></span>
+          </div>
+          <div class="cmpbar" id="r-cmp"></div>
+        </div>
+        <div class="panel" id="r-hlpanel" style="display:none">
+          <div class="ph"><h3>Notable finds</h3><span class="hint">where a layer did something a conventional archiver cannot</span></div>
+          <div class="pb" id="r-highlights"></div>
+        </div>
+        <div class="panel">
+          <div class="ph"><h3>What happened, file type by file type</h3></div>
+          <table id="r-table"></table>
+          <div class="note" id="r-note"></div>
+        </div>
+        <div class="panel" id="r-sharepanel">
+          <div class="ph"><h3>Send it anywhere</h3><span class="hint">the archive itself, unchanged, checked by SHA-256 at the other end</span></div>
+          <div class="pb">
+            <div class="sharerow">
+              <button class="btn" id="b-sh-page">Web page (.html)</button>
+              <span>One file anyone can open in a browser &mdash; offline, nothing to install. Email it, put it on a USB stick or a website.</span>
+            </div>
+            <div class="sharerow">
+              <button class="btn" id="b-sh-paper">Paper backup (.pdf)</button>
+              <span>Pages of QR codes to print. Restore by photographing or scanning them; a lost page can be missing.</span>
+            </div>
+            <div class="sharerow">
+              <button class="btn" id="b-sh-audio">Sound (.wav)</button>
+              <span>Play it from one device to another&rsquo;s microphone (small archives, about 130 bytes a second).</span>
+            </div>
+            <div class="note" id="r-sharemsg"></div>
+          </div>
+        </div>
+        <div class="foot">
+          <button class="btn" id="b-reveal">Show in folder</button>
+          <button class="btn primary" id="b-again">Crush something else</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============ OPEN ============ -->
+    <div class="view" id="v-open">
+      <div class="hero"><h1>Open a .crush archive</h1>
+        <p>Inspect what is inside, then restore it. Every file is checked against the
+           SHA-256 recorded when it was compressed.</p></div>
+      <div class="drop" style="padding:38px 28px">
+        <div class="row"><button class="btn" id="b-pickarch">Choose a .crush file</button></div>
+      </div>
+      <div id="archinfo"></div>
+    </div>
+
+    <!-- ============ ENGINE ============ -->
+    <div class="view" id="v-engine">
+      <div class="hero"><h1>Engine</h1>
+        <p>Crush works with nothing installed. These optional components make it work harder.</p></div>
+      <div class="panel"><div class="ph"><h3>Components on this machine</h3></div>
+        <div id="caps"></div></div>
+      <div class="panel">
+        <div class="ph"><h3>How Crush decides</h3></div>
+        <div class="note" style="border-top:none;line-height:1.75">
+          <b>1. Identify.</b> Every file is sniffed by structure, not just its extension.<br>
+          <b>2. Transform.</b> A reversible transform exposes the real content — a Zip-family
+          container is unwrapped, a JPEG is re-coded into JPEG XL's stronger entropy model, PCM
+          audio is run through a linear predictor, a numeric array has its byte planes transposed.<br>
+          <b>3. Prove it.</b> Every transform is inverted and compared against the original
+          <i>before anything is written</i>. One that does not reproduce the input exactly is
+          discarded and the file falls back to plain compression.<br>
+          <b>4. Bundle.</b> Files of the same kind are compressed together in one solid stream so
+          redundancy between them is found. Identical files are stored once.<br>
+          <b>5. Compete.</b> Each bundle is compressed by every codec that suits it — LZMA2 with
+          the right filter, Brotli, Zstandard, PPMd, and the Crush context-mixing engine — and the
+          smallest output wins.<br><br>
+          <b>What Crush will not claim.</b> No compressor can shrink every input: there are 2ⁿ
+          files of n bits and only 2ⁿ−1 shorter ones, so any reversible scheme that shrinks some
+          files must enlarge others. Crush never inflates a file — it stores it instead — and it
+          never claims a saving it has not measured.
+        </div>
+      </div>
+    </div>
+
+  </div></div>
+</div>
+
+<script>
+const $ = s => document.querySelector(s);
+const $$ = s => [...document.querySelectorAll(s)];
+/* The host installs window.crushApi synchronously in the page - in the native
+   window and in the browser alike. window.pywebview.api is only a fallback for
+   an older host; it is injected asynchronously, which is what used to produce
+   "api(...).ping is not a function". */
+const api = () => window.crushApi || (window.pywebview && window.pywebview.api) || {};
+
+let STATE = {tier:"balanced", harder:false, photo:null, audio:null,
+             summary:null, result:null, arch:null,
+             nativeDrop:false, pick:new Set(), archFilter:"",
+             encrypt:false, kdf:"balanced", crypto:null, session:null};
+const AUDIO_BR=["96k","128k","160k","192k"];
+
+const CLS_COLOR = {
+  text:"#60A5FA", code:"#A78BFA", jpeg:"#FFB020", png:"#34D399", image:"#2DD4BF",
+  wav:"#F2447B", media:"#F472B6", exe_pe:"#FF5C39", exe_elf:"#FB923C",
+  zipfamily:"#FACC15", archive:"#94A3B8", numeric:"#22D3EE", db:"#818CF8",
+  pdf:"#EF4444", font:"#C084FC", generic:"#94A3B8", gzip:"#A3E635"
+};
+const CLS_ABBR = {
+  text:"TXT", code:"SRC", jpeg:"JPG", png:"PNG", image:"IMG", wav:"WAV", media:"MED",
+  exe_pe:"EXE", exe_elf:"ELF", zipfamily:"ZIP", archive:"ARC", numeric:"NUM",
+  db:"DB", pdf:"PDF", font:"TTF", generic:"BIN", gzip:"GZ"
+};
+function fmt(b){
+  if(b===0) return "0 B";
+  const u=["B","KB","MB","GB","TB"]; let i=0, n=b;
+  while(n>=1024 && i<u.length-1){n/=1024;i++;}
+  return (n<10&&i>0? n.toFixed(1): Math.round(n)) + " " + u[i];
+}
+function show(stage){
+  ["drop","ready","work","done"].forEach(s=>{
+    const el=$("#stage-"+s); if(el) el.style.display = (s===stage)?"":"none";
+  });
+}
+$$(".navbtn[data-nav]").forEach(b=>b.onclick=()=>{
+  $$(".navbtn[data-nav]").forEach(x=>x.classList.remove("on"));
+  b.classList.add("on");
+  $$(".view").forEach(v=>v.classList.remove("on"));
+  $("#v-"+b.dataset.nav).classList.add("on");
+  if(b.dataset.nav==="engine") loadCaps();
+  if(b.dataset.nav!=="open" && STATE.session){
+    // Walking away from an unlocked archive re-locks it.
+    api().lock(STATE.session).catch(()=>{});
+    STATE.session = null; STATE.arch = null;
+    $("#archinfo").innerHTML = "";
+  }
+});
+
+/* ---------------- input ---------------- */
+$("#b-files").onclick   = async()=>render(await api().pick_files());
+$("#b-folder").onclick  = async()=>render(await api().pick_folder());
+$("#b-add").onclick     = async()=>render(await api().pick_files());
+$("#b-clear").onclick   = async()=>render(await api().clear());
+$("#b-back").onclick    = async()=>render(await api().clear());
+$("#b-again").onclick   = async()=>{ $("#errbox").innerHTML=""; render(await api().clear()); };
+
+/* ---------------- drag and drop ----------------
+   Dropping must ingest what was dropped. It must never open a file dialog -
+   that is precisely the thing the person avoided by dropping.
+
+   A web view is not allowed to tell JavaScript where a dropped file lives, so
+   there are two routes to the bytes:
+
+     1. The host captured the real paths natively (ping.native_drop). Nothing is
+        copied and folders come through whole. The host emits "drop_ingested".
+     2. Otherwise the page reads the drop itself - walking directory entries so
+        folders work too - and uploads it into a staging folder on this machine.
+
+   Route 1 is tried first and route 2 starts only if it stays silent, so a drop
+   is never ingested twice. */
+const dz=$("#dz");
+let DROP_ACK = 0;
+window.addEventListener("dragover", ev=>ev.preventDefault());
+window.addEventListener("drop",     ev=>ev.preventDefault());
+/* The host only learns whether it can capture native paths once its window has
+   finished loading, which can be after this page first asks. Re-check when a
+   drag starts - that is the last moment it matters, and it costs one request. */
+let DROP_MODE_FRESH = false;
+async function refreshDropMode(){
+  if(DROP_MODE_FRESH) return;
+  DROP_MODE_FRESH = true;
+  try{ const p = await api().ping(); STATE.nativeDrop = !!(p && p.native_drop); }
+  catch(e){}
+}
+
+["dragenter","dragover"].forEach(e=>dz.addEventListener(e,ev=>{
+  ev.preventDefault(); if(ev.dataTransfer) ev.dataTransfer.dropEffect="copy";
+  dz.classList.add("hot");
+  refreshDropMode();
+}));
+["dragleave","dragend"].forEach(e=>dz.addEventListener(e,ev=>{
+  ev.preventDefault(); dz.classList.remove("hot");
+}));
+
+function dropStatus(txt){
+  const el=$("#dz-status"); if(!el) return;
+  el.textContent = txt || "";
+  el.style.display = txt ? "" : "none";
+}
+
+/* Walk a dropped directory entry into a flat list of {file, rel}. */
+/* Anything the browser refuses to read is counted, never silently dropped:
+   the person is told how many items were left out. */
+let DROP_SKIPPED = [];
+function readEntries(reader, where){
+  return new Promise(res=>reader.readEntries(res, ()=>{ DROP_SKIPPED.push(where); res([]); }));
+}
+async function walkEntry(entry, prefix, out){
+  if(!entry) return;
+  if(entry.isFile){
+    const f = await new Promise(res=>entry.file(res, ()=>res(null)));
+    if(f) out.push({file:f, rel:prefix + entry.name});
+    else DROP_SKIPPED.push(prefix + entry.name);
+  }else if(entry.isDirectory){
+    const reader = entry.createReader();
+    for(;;){
+      const batch = await readEntries(reader, prefix + entry.name + "/");
+      if(!batch.length) break;
+      for(const e of batch) await walkEntry(e, prefix + entry.name + "/", out);
+    }
+  }
+}
+
+async function uploadDrop(entries, files){
+  DROP_SKIPPED = [];
+  const list = [];
+  for(const e of (entries||[])) await walkEntry(e, "", list);
+  if(!list.length){
+    for(const f of (files||[])) list.push({file:f, rel:(f.webkitRelativePath || f.name)});
+  }
+  if(!list.length){ dropStatus("Nothing readable was dropped."); setTimeout(()=>dropStatus(""),3000); return; }
+
+  const total = list.reduce((a,x)=>a+x.file.size, 0);
+  const {id} = await api().begin_drop();
+  let done = 0;
+  try{
+    for(const it of list){
+      dropStatus(`Reading ${esc(it.rel)} — ${fmt(done)} of ${fmt(total)}`);
+      await api().upload(id, it.rel, it.file);
+      done += it.file.size;
+    }
+  }catch(e){
+    dropStatus("");
+    $("#errbox").innerHTML = `<div class="err">The dropped files could not all be read (${esc(String(e))}). `+
+      `Nothing was queued from this drop. Try "Add files" instead.</div>`;
+    return;
+  }
+  dropStatus("");
+  render(await api().finish_drop(id));
+  if(DROP_SKIPPED.length){
+    $("#errbox").innerHTML = `<div class="err">${DROP_SKIPPED.length} dropped item(s) could not be read `+
+      `by this window and were left out, for example ${esc(DROP_SKIPPED.slice(0,3).join(", "))}. `+
+      `Use "Add files" or "Add folder" to include them.</div>`;
+  }
+}
+
+dz.addEventListener("drop", async ev=>{
+  ev.preventDefault();
+  dz.classList.remove("hot");
+  const dt = ev.dataTransfer;
+  if(!dt) return;
+
+  // Some hosts do expose the real path directly. Free win when they do.
+  const direct = [...(dt.files||[])].map(f=>f.path).filter(Boolean);
+  if(direct.length){ render(await api().add_paths(direct)); return; }
+
+  // webkitGetAsEntry must be called while the event is still being handled -
+  // the drag data store is emptied the moment it returns. The entry objects
+  // themselves stay usable afterwards, so grab them now and read them later.
+  const entries = dt.items
+    ? [...dt.items].filter(i=>i.kind==="file")
+                   .map(i=>i.webkitGetAsEntry ? i.webkitGetAsEntry() : null)
+                   .filter(Boolean)
+    : [];
+  const files = dt.files ? [...dt.files] : [];
+
+  if(STATE.nativeDrop){
+    // The host is capturing paths. Give it a moment; if it does not report
+    // back, it did not get them, so read the drop here instead.
+    const mark = DROP_ACK;
+    dropStatus("Reading what you dropped…");
+    setTimeout(async ()=>{
+      if(DROP_ACK !== mark){ dropStatus(""); return; }   // the host got it
+      try{ await uploadDrop(entries, files); }
+      catch(e){ dropStatus("Could not read that: " + (e && e.message || e)); }
+    }, 900);
+    return;
+  }
+  try{ await uploadDrop(entries, files); }
+  catch(e){ dropStatus("Could not read that: " + (e && e.message || e)); }
+});
+
+/* ---------------- render ---------------- */
+function render(s){
+  STATE.summary = s;
+  if(!s || !s.queue || !s.queue.length){ show("drop"); return; }
+  show("ready");
+  $("#qmeta").textContent = s.scanning
+    ? "scanning…"
+    : `${s.total_files.toLocaleString()} file${s.total_files===1?"":"s"} · ${fmt(s.total_size)}`;
+  $("#qlist").innerHTML = s.queue.map(q=>`
+    <div class="item">
+      <div class="chip" style="background:${q.dir?"#FACC15":"#60A5FA"}">${q.dir?"DIR":"FILE"}</div>
+      <div class="iname" title="${esc(q.path)}">${esc(q.name)}</div>
+      <div class="imeta">${q.scanning?"scanning…":(q.dir?q.files.toLocaleString()+" files · ":"")+fmt(q.size)}</div>
+      <button class="x" data-rm="${esc(q.path)}">×</button>
+    </div>`).join("");
+  $$("[data-rm]").forEach(b=>b.onclick=async()=>render(await api().remove(b.dataset.rm)));
+
+  const max = Math.max(1, ...s.breakdown.map(r=>r.size));
+  $("#breakdown").innerHTML = s.breakdown.map(r=>`
+    <div class="tline">
+      <div class="chip" style="background:${CLS_COLOR[r.cls]||"#94A3B8"}">${CLS_ABBR[r.cls]||"BIN"}</div>
+      <div class="tname">${esc(r.label)}</div>
+      <div class="tbar"><i style="width:${Math.max(3,100*r.size/max)}%"></i></div>
+      <div class="tsize">${fmt(r.size)}</div>
+    </div>
+    <div class="tplan">${esc(r.plan)} · ${r.n.toLocaleString()} file${r.n===1?"":"s"}</div>`).join("")
+    || `<div class="empty">${s.scanning?"Scanning…":"No files detected"}</div>`;
+}
+function esc(t){return String(t).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]))}
+
+/* ---------------- tiers ---------------- */
+const TIER_SPEED = {quick:1, balanced:2, crush:3, obsession:4};
+async function loadTiers(){
+  const ts = await api().tiers();
+  $("#tiers").innerHTML = ts.map(t=>`
+    <div class="tier ${t.id===STATE.tier?"on":""}" data-tier="${t.id}">
+      <b>${esc(t.label)}</b><small>${esc(t.desc)}</small>
+      <div class="speed">${[1,2,3,4].map(i=>`<i class="${i<=TIER_SPEED[t.id]?"f":""}"></i>`).join("")}</div>
+    </div>`).join("");
+  $$("[data-tier]").forEach(el=>el.onclick=()=>{
+    STATE.tier = el.dataset.tier;
+    $$("[data-tier]").forEach(x=>x.classList.toggle("on", x===el));
+  });
+}
+$("#sw-harder").onclick = e=>{
+  STATE.harder = !STATE.harder;
+  e.currentTarget.classList.toggle("on", STATE.harder);
+};
+
+/* ---------------- encryption ----------------
+   The passphrase lives in this page's memory only while the panel is open, and
+   is sent to the host exactly once, in the body of the request that uses it. It
+   is never put in a URL, never stored, and cleared the moment it is handed over. */
+const PW_COLOR = ["#EF4444","#F97316","#FACC15","#34D399","#22D3EE"];
+
+async function initCrypto(){
+  const av = await api().crypto_available();
+  STATE.crypto = av;
+  if(!av.ok){
+    $("#p-crypt").style.opacity = ".55";
+    $("#sw-crypt").style.pointerEvents = "none";
+    $("#crypt-suite").innerHTML =
+      "Unavailable on this machine — " + esc(av.reason) +
+      ".<br>Run <code style='color:#FFB020'>pip install cryptography argon2-cffi</code> and restart Crush.";
+  }else if(!av.strong_kdf){
+    $("#crypt-suite").innerHTML =
+      "scrypt key stretching, then XChaCha20-Poly1305. Strong, but " +
+      "<b>argon2-cffi is not installed</b>, so the memory-hard Argon2id is unavailable. " +
+      "Run <code style='color:#FFB020'>pip install argon2-cffi</code> for the stronger option.";
+  }
+}
+
+function cryptOn(){ return STATE.encrypt === true; }
+
+$("#sw-crypt").onclick = e=>{
+  STATE.encrypt = !STATE.encrypt;
+  e.currentTarget.classList.toggle("on", STATE.encrypt);
+  $("#crypt-body").style.display = STATE.encrypt ? "" : "none";
+  if(STATE.encrypt) setTimeout(()=>$("#pw1").focus(), 60);
+  else { $("#pw1").value = ""; $("#pw2").value = ""; syncPw(); }
+};
+
+$("#b-pwshow").onclick = ()=>{
+  const shown = $("#pw1").type === "text";
+  $("#pw1").type = $("#pw2").type = shown ? "password" : "text";
+  $("#b-pwshow").textContent = shown ? "Show" : "Hide";
+};
+
+$("#b-pwgen").onclick = async()=>{
+  const p = await api().suggest_passphrase();
+  if(!p) return;
+  $("#pw1").value = $("#pw2").value = p;
+  $("#pw1").type = $("#pw2").type = "text";
+  $("#b-pwshow").textContent = "Hide";
+  syncPw();
+};
+
+let pwTimer = null;
+function syncPw(){
+  const a = $("#pw1").value, b = $("#pw2").value;
+  $("#pw2").classList.toggle("mismatch", !!b && a !== b);
+  clearTimeout(pwTimer);
+  pwTimer = setTimeout(async()=>{
+    if(!a){
+      $("#pwbar").style.width = "0";
+      $("#pwnote").textContent = "A passphrase you can remember and nobody can guess.";
+      return;
+    }
+    let s;
+    try{ s = await api().password_strength(a); }catch(e){ return; }
+    $("#pwbar").style.width = Math.min(100, 8 + s.bits) + "%";
+    $("#pwbar").style.background = PW_COLOR[s.level];
+    const years = s.bits >= 60
+      ? "Beyond any offline attack at this key-stretching cost."
+      : (s.bits >= 44 ? "A determined attacker with your archive would need a long time."
+                      : "A cracking rig with your archive would get through this.");
+    let extra = "";
+    if(a !== a.trim())
+      extra += " <b style='color:#FFB020'>This starts or ends with a space</b>, which is easy " +
+               "to lose when you type it again. It is kept exactly as written.";
+    if(s.bits >= 60 && !s.notes.length)
+      extra += " <span style='color:var(--ink3)'>This meter recognises common passwords and " +
+               "Crush's own word list; an uncommon dictionary word can score higher than it " +
+               "deserves. <b>Suggest</b> gives you a provably 72-bit passphrase.</span>";
+    $("#pwnote").innerHTML = `<b>${esc(s.label)}</b> · about ${s.bits} bits of guessing work. ` +
+      esc(years) + (s.notes.length ? " " + s.notes.map(esc).join(" ") : "") + extra;
+  }, 160);
+}
+$("#pw1").oninput = syncPw;
+$("#pw2").oninput = syncPw;
+
+$$("#kdfrow .kdf").forEach(b=>b.onclick=()=>{
+  STATE.kdf = b.dataset.kdf;
+  $$("#kdfrow .kdf").forEach(x=>x.classList.toggle("on", x===b));
+});
+
+/* Returns the passphrase to use, or null if the user must fix something. */
+function passphraseOrComplaint(){
+  if(!cryptOn()) return {pw:null};
+  const a = $("#pw1").value, b = $("#pw2").value;
+  if(!a) return {error:"Type a passphrase, or turn encryption off."};
+  if(a !== b) return {error:"The two passphrases do not match."};
+  return {pw:a};
+}
+function syncPerc(){
+  $("#v-photo").textContent = "d " + (+$("#r-photo").value/100).toFixed(2);
+  $("#v-audio").textContent = AUDIO_BR[+$("#r-audio").value];
+  if(STATE.photo!==null) STATE.photo = +$("#r-photo").value/100;
+  if(STATE.audio!==null) STATE.audio = AUDIO_BR[+$("#r-audio").value];
+}
+$("#sw-photo").onclick = e=>{
+  const on = STATE.photo===null;
+  STATE.photo = on ? +$("#r-photo").value/100 : null;
+  e.currentTarget.classList.toggle("on", on);
+  $("#r-photo").disabled = !on; syncPerc();
+};
+$("#sw-audio").onclick = e=>{
+  const on = STATE.audio===null;
+  STATE.audio = on ? AUDIO_BR[+$("#r-audio").value] : null;
+  e.currentTarget.classList.toggle("on", on);
+  $("#r-audio").disabled = !on; syncPerc();
+};
+$("#r-photo").oninput = syncPerc;
+$("#r-audio").oninput = syncPerc;
+
+/* ---------------- run ---------------- */
+$("#b-go").onclick = async()=>{
+  const pass = passphraseOrComplaint();
+  if(pass.error){
+    $("#errbox").innerHTML = `<div class="err">${esc(pass.error)}</div>`;
+    $("#p-crypt").scrollIntoView({behavior:"smooth", block:"center"});
+    $("#pw1").focus();
+    return;
+  }
+  $("#errbox").innerHTML = "";
+  const def = await api().suggest_output();
+  const out = await api().choose_output(def.split(/[\\\/]/).pop() || "Archive.crush");
+  if(!out){ return; }
+  STATE.outPath = out;
+  show("work");
+  $("#pstage").textContent = "Analysing"; $("#pname").textContent=""; $("#pbar").style.width="2%";
+  const perc = {};
+  if(STATE.photo!==null) perc.photo = STATE.photo;
+  if(STATE.audio!==null) perc.audio = STATE.audio;
+  const r = await api().compress(out, STATE.tier, STATE.harder,
+                                 Object.keys(perc).length ? perc : null,
+                                 pass.pw, pass.pw ? STATE.kdf : null);
+  // The passphrase has been handed over; this page has no further use for it.
+  $("#pw1").value = ""; $("#pw2").value = "";
+  $("#pw1").type = $("#pw2").type = "password";
+  $("#b-pwshow").textContent = "Show";
+  if(r && r.error){ show("ready"); $("#errbox").innerHTML=`<div class="err">${esc(r.error)}</div>`; }
+};
+
+window.crushEvent = (ev, p)=>{
+  if(ev==="progress"){
+    const label = {analyze:"Identifying and transforming", compress:"Running the codec tournament",
+                   extract:"Restoring"}[p.stage] || p.stage;
+    $("#pstage").textContent = label;
+    $("#pname").textContent = p.name || "";
+    $("#pbar").style.width = Math.min(99, 100*(p.i+1)/Math.max(1,p.n)) + "%";
+  }
+  else if(ev==="summary"){ if(STATE.summary || (p.queue||[]).length) render(p); }
+  else if(ev==="drop_ingested"){ DROP_ACK++; dropStatus(""); }
+  else if(ev==="done") showResult(p);
+  else if(ev==="extracted") showExtracted(p);
+  else if(ev==="error"){
+    if(STATE.extracting){ extractError(p); return; }
+    show("ready"); $("#errbox").innerHTML=`<div class="err">${esc(p.message)}</div>`;
+  }
+};
+
+function countUp(el, to){
+  let t0=null;
+  const step = ts=>{ if(!t0)t0=ts; const k=Math.min(1,(ts-t0)/900);
+    const e=1-Math.pow(1-k,3);
+    el.textContent = (to*e).toFixed(1)+"%";
+    if(k<1) requestAnimationFrame(step); };
+  requestAnimationFrame(step);
+}
+
+function showResult(r){
+  STATE.result = r;
+  show("done");
+  $("#r-sharemsg").textContent = "";
+  const saved = 100*(1 - r.out/Math.max(1,r["in"]));
+  countUp($("#r-pct"), saved);
+  $("#r-sub").textContent = `smaller · ${r.files.toLocaleString()} file${r.files===1?"":"s"} in ${r.seconds.toFixed(1)}s`;
+  $("#r-before").textContent = fmt(r["in"]);
+  $("#r-after").textContent  = fmt(r.out);
+
+  const rows = r.report.rows;
+  $("#r-table").innerHTML = `
+    <tr><th>File type</th><th>Handling</th><th class="num">Before</th><th class="num">After</th><th class="num">Result</th></tr>
+    ` + rows.map(x=>`
+    <tr>
+      <td><span class="chip" style="background:${CLS_COLOR[x.cls]||"#94A3B8"};width:22px;height:22px;font-size:9px;display:inline-grid;vertical-align:-6px;margin-right:8px">${CLS_ABBR[x.cls]||"BIN"}</span>${esc(x.label)}
+          <div style="color:var(--ink3);font-size:11.5px;margin-top:2px">${x.n.toLocaleString()} file${x.n===1?"":"s"}</div></td>
+      <td>${(x.transform_names||[]).map(t=>`<span class="pill hot">${esc(t)}</span>`).join("")}
+          ${x.codec?`<span class="pill">${esc(x.codec)}</span>`:""}
+          ${x.exact===false?`<span class="pill good">content-exact</span>`:""}</td>
+      <td class="num">${fmt(x["in"])}</td>
+      <td class="num">${fmt(x.out)}</td>
+      <td class="num pct" style="color:${x.pct<50?"var(--good)":x.pct<90?"var(--hot1)":"var(--ink3)"}">${x.pct.toFixed(1)}%</td>
+    </tr>`).join("");
+
+  const hl = (r.report.highlights)||[];
+  $("#r-hlpanel").style.display = hl.length ? "" : "none";
+  $("#r-highlights").innerHTML = hl.map(h=>`
+    <div class="hl">
+      <span class="hlk ${h.kind}">${h.kind==="oracle"?"Oracle":h.kind==="prism"?"Prism":"Perceptual"}</span>
+      <div style="flex:1;min-width:0">
+        <div class="n" title="${esc(h.file)}">${esc(h.file.split("/").pop())}</div>
+        <div class="d">${esc(h.detail)}</div>
+      </div>
+      <div class="s">${fmt(h.size)}</div>
+    </div>`).join("");
+
+  const rep=r.report;
+  let notes=[];
+  if(rep.dedup_files) notes.push(`<b>${rep.dedup_files.toLocaleString()} duplicate file${rep.dedup_files===1?"":"s"}</b> stored once, saving ${fmt(rep.dedup_bytes)}.`);
+  if(rep.echo_saved) notes.push(`<b>Echo</b> found ${fmt(rep.echo_saved)} of duplicated content across the archive, beyond any codec's window.`);
+  if(rep.priors && rep.priors.length) notes.push(`<b>Shared priors used:</b> ${rep.priors.map(esc).join(", ")}. Those bytes travel with Crush, not with the archive — anyone with Crush can open it.`);
+  if(rep.recomposed) notes.push(`<b>${rep.recomposed} Zip-based file${rep.recomposed===1?"":"s"}</b> rebuilt rather than byte-preserved. Contents verified identical by SHA-256.`);
+  const wn = r.warnings || {};
+  if(wn.skipped_links) notes.push(`<b style="color:var(--hot1)">${wn.skipped_links} link(s) or special file(s) were not included</b> — Crush does not follow links. Add the folders they point to directly if you want them.`);
+  if((wn.changed||[]).length) notes.push(`<b style="color:var(--hot1)">${wn.changed.length} file(s) changed while being read</b> and were archived as they were read: ${wn.changed.slice(0,5).map(esc).join(", ")}${wn.changed.length>5?", …":""}. Close the programs using them and compress again for a clean copy.`);
+  notes.push(`Every file was inverted and byte-compared before it was written. Extraction re-verifies each one.`);
+  $("#r-note").innerHTML = notes.join("<br>");
+
+  // comparison against a ZIP baseline measured on THESE files during the run
+  if(r.zip_equiv){
+    const cmp = [
+      {n:"Original", v:r["in"]},
+      {n:"ZIP -9", v:r.zip_equiv},
+      {n:"Crush", v:r.out, me:true}
+    ];
+    const mx = Math.max(...cmp.map(c=>c.v));
+    const beat = 100*(1 - r.out/r.zip_equiv);
+    $("#r-cmp").innerHTML = `<div style="color:var(--ink3);font-size:11.5px;margin-bottom:11px">
+        ZIP figure measured on these exact files during this run &mdash; deflate level 9 per
+        file, the way every ZIP tool does it. Crush came out
+        <b style="color:var(--hot1)">${beat.toFixed(1)}% smaller</b>.</div>` +
+      cmp.map(c=>`<div class="cmprow ${c.me?"me":""}">
+        <div class="cmpname">${c.n}</div>
+        <div class="cmptrack"><i style="width:${100*c.v/mx}%"></i></div>
+        <div class="cmpval">${fmt(c.v)}</div></div>`).join("");
+  } else { $("#r-cmp").innerHTML = ""; }
+}
+
+$("#b-reveal").onclick = ()=>{ if(STATE.result) api().reveal(STATE.result.out_path); };
+
+/* Share: a self-opening web page, a printable QR backup, or sound. */
+async function doShare(kind, btn){
+  const r = STATE.result; if(!r) return;
+  const msg = $("#r-sharemsg");
+  const label = {page:"Building the web page", paper:"Laying out the QR pages", audio:"Writing the sound file"}[kind];
+  document.querySelectorAll(".sharerow .btn").forEach(b=>b.disabled=true);
+  msg.textContent = label + "…" + (kind==="page" && r.share && !r.share.page_ok
+      ? " (re-packing with browser-friendly layers first; this takes a while)" : "");
+  try{
+    const o = await api().share(kind, r.out_path, r.share_sid||null);
+    if(o.error){ msg.innerHTML = `<span style="color:var(--bad,#ef4444)">${esc(o.error)}</span>`; return; }
+    const name = esc(o.path.split(/[\\/]/).pop());
+    const extra = kind==="page" ? (o.repacked ? " Some layers were swapped for ones a browser can decode." : "")
+                : kind==="paper" ? ` ${o.pages} page${o.pages===1?"":"s"}; ${esc(o.any_of)} restore it.`
+                : ` ${o.seconds} seconds of sound.`;
+    msg.innerHTML = `<b>${name}</b> (${fmt(o.bytes)}) saved next to the archive.${extra} `+
+                    `<a href="#" id="sh-show">Show in folder</a>`;
+    $("#sh-show").onclick = (e)=>{ e.preventDefault(); api().reveal(o.path); };
+  } catch(e){ msg.textContent = "That did not work: " + e; }
+  finally { document.querySelectorAll(".sharerow .btn").forEach(b=>b.disabled=false); }
+}
+$("#b-sh-page").onclick  = ()=>doShare("page");
+$("#b-sh-paper").onclick = ()=>doShare("paper");
+$("#b-sh-audio").onclick = ()=>doShare("audio");
+
+/* ---------------- open / extract ----------------
+   An archive can be restored whole or file by file. Ticking nothing means
+   "everything", which is the common case and needs no clicks. */
+const ARCH_ROWS = 1500;
+
+$("#b-pickarch").onclick = async()=>{
+  const a = await api().pick_archive();
+  if(!a) return;
+  if(a.locked){ drawLock(a); return; }
+  if(a.error){ $("#archinfo").innerHTML=`<div class="err">${esc(a.error)}</div>`; return; }
+  openArchive(a);
+};
+
+function openArchive(a){
+  STATE.arch = a;
+  STATE.pick = new Set();
+  STATE.archFilter = "";
+  drawArchive();
+}
+
+/* ---------------- the lock screen ----------------
+   A locked archive gives up nothing: not a file name, not a file count, not
+   even how many files there are. All this screen can honestly show is that it
+   is a Crush archive, how big it is, and how hard it was locked. */
+function drawLock(a){
+  STATE.arch = null;
+  STATE.session = null;
+  const name = (a.path||"").split(/[\\\/]/).pop();
+  $("#archinfo").innerHTML = `
+    <div class="lockwrap">
+      <div class="lockicon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="#0E1014" stroke-width="2.2"
+             stroke-linecap="round" stroke-linejoin="round">
+          <rect x="4" y="10.5" width="16" height="10.5" rx="2.5"/>
+          <path d="M8 10.5V7a4 4 0 0 1 8 0v3.5"/>
+        </svg>
+      </div>
+      <h2>${esc(name || "This archive is locked")}</h2>
+      <p>Everything inside &mdash; the files, their names, their sizes, even how many
+         there are &mdash; is encrypted. Enter the passphrase to open it.</p>
+      <div class="lockform">
+        <input type="password" id="lockpw" class="pwbox" autocomplete="current-password"
+               spellcheck="false" placeholder="Passphrase" autofocus>
+        <button class="btn primary" id="b-unlock">Unlock</button>
+      </div>
+      <div class="lockerr" id="lockerr"></div>
+      <div class="lockmeta">
+        ${fmt(a.size)} on disk · ${esc(a.kdf === "argon2id" ? "Argon2id" : "scrypt")}
+        key stretching${a.memory_mb ? " · " + a.memory_mb + " MB per attempt" : ""}
+        · XChaCha20-Poly1305<br>
+        Unlocking takes a moment on purpose &mdash; that delay is what a guessing
+        attack has to pay for every attempt.
+        ${a.supported ? "" : "<br><b style='color:#FCA5A5'>This archive was written by a newer version of Crush.</b>"}
+      </div>
+    </div>`;
+  const go = async()=>{
+    const pw = $("#lockpw").value;
+    if(!pw){ $("#lockerr").textContent = "Type the passphrase."; return; }
+    $("#b-unlock").disabled = true;
+    $("#b-unlock").textContent = "Unlocking\u2026";
+    $("#lockerr").textContent = "";
+    let r;
+    try{ r = await api().unlock(a.path, pw); }
+    catch(e){ r = {error: String(e && e.message || e)}; }
+    $("#lockpw").value = "";                       // gone from this page either way
+    $("#b-unlock").disabled = false;
+    $("#b-unlock").textContent = "Unlock";
+    if(!r || r.error || r.locked){
+      $("#lockerr").textContent = (r && r.error) || "That passphrase did not open this archive.";
+      $("#lockpw").focus();
+      return;
+    }
+    STATE.session = r.session || null;
+    openArchive(r);
+  };
+  $("#b-unlock").onclick = go;
+  $("#lockpw").onkeydown = e=>{ if(e.key === "Enter") go(); };
+  setTimeout(()=>$("#lockpw").focus(), 60);
+}
+
+function archMatches(){
+  const q = STATE.archFilter.trim().toLowerCase();
+  if(!q) return STATE.arch.files;
+  return STATE.arch.files.filter(f=>f.p.toLowerCase().includes(q));
+}
+
+function drawArchive(){
+  const a = STATE.arch;
+  const saved = 100*(1 - a.size/Math.max(1,a.total_in));
+  $("#archinfo").innerHTML = `
+    <div class="panel">
+      <div class="ph"><h3>${esc(a.path.split(/[\\\/]/).pop())}</h3>
+        ${a.encrypted ? '<span class="pill lock">unlocked</span>' : ''}
+        <span class="hint">${a.files.length.toLocaleString()} files ·
+          ${fmt(a.size)} on disk · ${fmt(a.total_in)} restored · ${saved.toFixed(1)}% smaller</span></div>
+      <div class="ph" style="border-top:1px solid var(--line)">
+        <input id="arch-q" class="qbox" placeholder="Filter by name or folder…"
+               value="${esc(STATE.archFilter)}">
+        <button class="navbtn" id="b-selall">Select all</button>
+        <button class="navbtn" id="b-selnone">Select none</button>
+        <span class="hint" id="selmeta" style="margin-left:auto"></span>
+      </div>
+      <div class="pb" id="archlist" style="max-height:360px;overflow:auto"></div>
+    </div>
+    <div class="foot">
+      <button class="btn primary" id="b-extract-sel" disabled>Extract selected</button>
+      <button class="btn" id="b-extract">Extract everything</button>
+    </div>`;
+
+  $("#arch-q").oninput = e=>{ STATE.archFilter = e.target.value; drawRows(); };
+  $("#b-selall").onclick  = ()=>{ archMatches().forEach(f=>STATE.pick.add(f.p)); drawRows(); };
+  $("#b-selnone").onclick = ()=>{ archMatches().forEach(f=>STATE.pick.delete(f.p)); drawRows(); };
+  $("#b-extract").onclick     = ()=>runExtract(null);
+  $("#b-extract-sel").onclick = ()=>runExtract([...STATE.pick]);
+  drawRows();
+}
+
+function drawRows(){
+  const rows = archMatches();
+  const shown = rows.slice(0, ARCH_ROWS);
+  $("#archlist").innerHTML = shown.map(f=>`
+    <label class="item pickable">
+      <input type="checkbox" class="ck" data-p="${esc(f.p)}" ${STATE.pick.has(f.p)?"checked":""}>
+      <div class="chip" style="background:${CLS_COLOR[f.cls]||"#94A3B8"}">${CLS_ABBR[f.cls]||"BIN"}</div>
+      <div class="iname" title="${esc(f.p)}">${esc(f.p)}</div>
+      ${f.exact===false?'<span class="pill good">content-exact</span>':''}
+      <div class="imeta">${fmt(f.s)}</div>
+    </label>`).join("")
+    + (rows.length>ARCH_ROWS
+        ? `<div class="empty">…and ${(rows.length-ARCH_ROWS).toLocaleString()} more — narrow the filter to reach them</div>`
+        : "")
+    + (rows.length ? "" : `<div class="empty">Nothing matches “${esc(STATE.archFilter)}”</div>`);
+
+  $$("#archlist .ck").forEach(c=>c.onchange = ()=>{
+    if(c.checked) STATE.pick.add(c.dataset.p); else STATE.pick.delete(c.dataset.p);
+    updateSel();
+  });
+  updateSel();
+}
+
+function updateSel(){
+  const n = STATE.pick.size;
+  const bytes = STATE.arch.files.filter(f=>STATE.pick.has(f.p)).reduce((a,f)=>a+f.s, 0);
+  const meta = $("#selmeta"), btn = $("#b-extract-sel");
+  if(meta) meta.textContent = n ? `${n.toLocaleString()} selected · ${fmt(bytes)}` : "nothing selected";
+  if(btn){
+    btn.disabled = n === 0;
+    btn.textContent = n ? `Extract ${n.toLocaleString()} selected` : "Extract selected";
+  }
+}
+
+async function runExtract(select, dest, overwrite){
+  const a = STATE.arch;
+  if(!dest) dest = await api().choose_dest();
+  if(!dest) return;
+  STATE.lastExtract = {select, dest};
+  STATE.extracting = true;
+  $("#archinfo").innerHTML = `<div class="progwrap"><div class="pulse"></div>
+    <div class="pstage" id="pstage">Restoring</div><div class="pname" id="pname"></div>
+    <div class="ptrack"><i id="pbar" style="width:0%"></i></div></div>`;
+  const r = await api().extract(a.path, dest, select, STATE.session || null, !!overwrite);
+  if(r && r.error) extractError({message:r.error});
+}
+
+/* Extraction never replaces a file without asking. If any target already
+   exists, nothing has been written yet and the engine says so; the person
+   chooses to replace them or to pick another folder. */
+function extractError(p){
+  STATE.extracting = false;
+  const le = STATE.lastExtract || {};
+  $("#archinfo").innerHTML = `
+    <div class="result" style="text-align:left;max-width:600px;margin:0 auto">
+      <div class="err">${esc(p.message)}</div>
+      ${p.exists ? `<p style="color:var(--ink2);font-size:13px;margin:14px 0 0">Nothing has been
+         written. Replacing puts the archived versions in place of the files that are there now.</p>` : ""}
+    </div>
+    <div class="foot">
+      ${p.exists ? `<button class="btn" id="b-x-replace">Replace them</button>
+                    <button class="btn primary" id="b-x-other">Choose another folder</button>` : ""}
+      ${STATE.arch?`<button class="btn ghost" id="b-backarch">Back to the archive</button>`:""}
+    </div>`;
+  const rp=$("#b-x-replace"), ot=$("#b-x-other"), back=$("#b-backarch");
+  if(rp) rp.onclick = ()=>runExtract(le.select, le.dest, true);
+  if(ot) ot.onclick = ()=>runExtract(le.select, null, false);
+  if(back) back.onclick = ()=>drawArchive();
+}
+
+function showExtracted(r){
+  STATE.extracting = false;
+  const bad = r.failed.length;
+  $("#archinfo").innerHTML = `
+    <div class="result">
+      <div class="bignum" style="font-size:52px">${bad?"Check":"Verified"}</div>
+      <div class="bigsub">${r.written.toLocaleString()} file${r.written===1?"":"s"} restored${
+        r.partial ? ` of ${r.total.toLocaleString()} in the archive` : ""} ·
+        ${r.verified.toLocaleString()} verified against their recorded SHA-256 ·
+        ${r.seconds.toFixed(1)}s</div>
+      ${bad?`<div class="err" style="max-width:560px;margin:18px auto 0;text-align:left">${bad} file(s) were not restored. Nothing that failed its check was written.\n${esc(r.failed.slice(0,20).join("\n"))}${bad>20?"\n...":""}</div>`:""}
+      ${(r.notes||[]).map(n=>`<div class="err" style="max-width:560px;margin:10px auto 0;text-align:left">${n.files.length} file(s): ${esc(n.why)}</div>`).join("")}
+    </div>
+    <div class="foot">
+      <button class="btn" id="b-showdest">Show in folder</button>
+      ${STATE.arch?`<button class="btn ghost" id="b-backarch">Back to the archive</button>`:""}
+    </div>`;
+  $("#b-showdest").onclick = ()=>api().reveal(r.dest);
+  const back = $("#b-backarch");
+  if(back) back.onclick = ()=>drawArchive();
+}
+
+/* ---------------- engine ---------------- */
+async function loadCaps(){
+  const caps = await api().capabilities();
+  $("#caps").innerHTML = caps.map(c=>`
+    <div class="cap"><div class="dot ${c.ok?"ok":""}"></div>
+      <div><b>${esc(c.name)}</b><small>${esc(c.detail)}</small></div>
+      <div class="st">${esc(c.note)}</div></div>`).join("");
+}
+
+/* ---------------- bootstrap ----------------
+   window.crushApi is defined by a <script> the host puts in this page, so it is
+   there before this line runs. The retry loop below is kept anyway, because an
+   older host may still be injecting its bridge asynchronously and because the
+   first call has to reach a server that may still be binding its socket.
+   Nothing latches until a call has actually come back. */
+let BOOTED = false;
+
+function bridgeReady(){
+  const a = api();
+  return typeof a.ping === "function" || typeof a.summary === "function";
+}
+
+async function boot(){
+  if(BOOTED) return true;
+  if(!bridgeReady()) return false;
+  let p = null;
+  try{
+    p = (typeof api().ping === "function") ? await api().ping() : {engine:true};
+  }catch(e){
+    return false;                       // not ready yet - the poller retries
+  }
+  STATE.nativeDrop = !!(p && p.native_drop);
+  if(p && p.engine === false){
+    BOOTED = true;
+    $("#boot-msg").textContent = "The compression engine did not load";
+    $("#boot-sub").innerHTML = "Missing: <b>" + ((p.missing||[]).join(", ") || "unknown") +
+      "</b><br><br>Open a command prompt in the Crush folder and run:<br>" +
+      "<code style='color:#FFB020'>pip install numpy zstandard brotli pyppmd</code>" +
+      "<br><br>Details were written to<br><code style='font-size:11px'>" + esc(p.log||"") + "</code>";
+    return true;
+  }
+  try{
+    await loadTiers();
+    await initCrypto();
+    render(await api().summary());
+  }catch(e){
+    return false;                       // still settling - retry
+  }
+  BOOTED = true;
+  $("#boot").style.display = "none";
+  return true;
+}
+window.addEventListener("crushready", boot);
+window.addEventListener("pywebviewready", boot);
+(function(){
+  let waited = 0;
+  const t = setInterval(async ()=>{
+    if(await boot()){ clearInterval(t); return; }
+    waited += 200;
+    if(waited === 3000) $("#boot-sub").textContent = "Waiting for the window to finish loading…";
+    if(waited >= 25000){
+      clearInterval(t);
+      $("#boot-msg").textContent = "Crush could not connect to its engine";
+      $("#boot-sub").innerHTML =
+        "The window opened but the Python bridge never appeared.<br><br>" +
+        "Try <b>Crush (Browser Mode).bat</b>, which runs the same app in your " +
+        "web browser and does not need WebView2.<br><br>" +
+        "<code style='font-size:11px'>crush-debug.log</code> in the Crush folder has the details.";
+    }
+  }, 200);
+})();
+</script>
+</body>
+</html>
