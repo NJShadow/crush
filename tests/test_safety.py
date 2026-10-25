@@ -194,6 +194,32 @@ def run(T):
         check(f"{codec}: a length that disagrees with the index is refused",
               raises(lambda: ce._bundle_raw(F(), b), ValueError))
 
+    # python -O strips assert, so a check on archive data must raise instead
+    probe = r"""
+import random, sys
+sys.path.insert(0, sys.argv[1])
+import crush_genome as g
+rnd = random.Random(5)
+fa = b"".join(b">seq%d\n" % i + bytes(rnd.choice(b"ACGT") for _ in range(240)) + b"\n"
+              for i in range(200))
+res = g.Fasta.forward(fa)
+if not res:
+    print("no-payload"); sys.exit()
+def refused(fn):
+    try:
+        fn()
+    except ValueError:
+        return True
+    except Exception:
+        return False
+    return False
+print(refused(lambda: g.Fastq.inverse(res[0])), refused(lambda: g.Tabular.inverse(res[0])),
+      refused(lambda: g.unpack(b"XXXX" + res[0][4:])))
+"""
+    out = subprocess.run([sys.executable, "-O", "-c", probe, ENGINE],
+                         capture_output=True, text=True).stdout.strip()
+    check("Helix refuses a payload of the wrong kind under python -O", out == "True True True", out)
+
     print("Big files are streamed")
     old = ce.BIG_FILE
     ce.BIG_FILE = 1 << 20                              # 1 MB, so the test is quick
