@@ -60,6 +60,24 @@ def text(n, seed=1):
     return " ".join(rnd.choice(words) for _ in range(n)).encode()
 
 
+def archive_named(T, names, arc):
+    """An archive whose entries are stored under `names` exactly - names this
+    machine may not be able to create, as an archive made on Linux or macOS
+    can carry. Each entry's content is its own name."""
+    d = tempfile.mkdtemp(dir=T)
+    fps = []
+    for i, n in enumerate(names):
+        w(f"{d}/{i}.txt", f"content of {n!r}\n")
+        fps.append((os.path.join(d, f"{i}.txt"), n))
+    real = ce.collect
+    ce.collect = lambda paths, skipped=None: list(fps)
+    try:
+        ce.compress([d], arc, tier="quick")
+    finally:
+        ce.collect = real
+    return arc
+
+
 def main():
     T = tempfile.mkdtemp(prefix="crush-safety-")
     try:
@@ -129,6 +147,20 @@ def run(T):
             x = ce.extract(arc, out2)
             check("nothing is written through a link that leads outside the destination",
                   r(f"{outside}/precious.txt") == b"precious" and sorted(os.listdir(outside)) == ["precious.txt"])
+
+    print("Names another system made")
+    hostile = ["nul", "x:y.txt", "meeting 12:30.txt", "NUL.txt", "sub/aux"]
+    arc_n = archive_named(T, ["ok.txt"] + hostile, f"{T}/names.crush")
+    try:
+        x = ce.extract(arc_n, f"{T}/outn")
+    except Exception as ex:
+        x = {"failed": None, "error": repr(ex)}
+    check("a device name or a ':' in one entry does not refuse the whole archive",
+          x["failed"] is not None and r(f"{T}/outn/ok.txt") == b"content of 'ok.txt'\n", str(x))
+    if os.name == "nt":
+        check("on Windows each of those entries fails by name, and nothing else is written",
+              sorted(x["failed"]) == sorted(hostile)
+              and [n for _, _, fs in os.walk(f"{T}/outn") for n in fs] == ["ok.txt"], str(x["failed"]))
 
     print("Damage costs only what it touches")
     big = f"{T}/two"
