@@ -183,6 +183,26 @@ def run(T):
         check("Windows: a path longer than 260 characters is restored byte-exact",
               r("\\\\?\\" + os.path.abspath(f"{T}/outw/{deep}")) == f"content of {deep!r}\n".encode())
 
+    # 'é' as one character (Windows, Linux) and as e + accent (macOS), and
+    # names differing only in case: one file on NTFS and APFS, two on Linux
+    folds = os.name == "nt" or sys.platform == "darwin"
+    for label, pair in (("upper and lower case", ["d/Report.txt", "d/report.txt"]),
+                        ("composed and decomposed accents", ["d/café.txt", "d/café.txt"])):
+        arc_c = archive_named(T, pair, f"{T}/fold.crush")
+        out_c = tempfile.mkdtemp(dir=T)
+        x = ce.extract(arc_c, out_c)
+        first = r(os.path.join(out_c, *pair[0].split("/"))) == f"content of {pair[0]!r}\n".encode()
+        if folds:
+            check(f"names differing only in {label}: the second fails by name, the first is intact",
+                  x["failed"] == [pair[1]] and first, str(x["failed"]))
+        else:
+            check(f"names differing only in {label}: both restored on a file system that keeps both",
+                  not x["failed"] and first, str(x["failed"]))
+    d = f"{T}/foldin"; w(f"{d}/café.txt", "one"); w(f"{d}/café.txt", "two")
+    if len(os.listdir(d)) == 2 and folds:
+        check("compressing two files whose names fold together here is refused",
+              raises(lambda: ce.compress([d], f"{T}/foldin.crush"), ValueError))
+
     print("Damage costs only what it touches")
     big = f"{T}/two"
     w(f"{big}/t.txt", text(30000, 3)); w(f"{big}/r.bin", os.urandom(200000))
