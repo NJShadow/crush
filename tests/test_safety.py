@@ -162,6 +162,27 @@ def run(T):
               sorted(x["failed"]) == sorted(hostile)
               and [n for _, _, fs in os.walk(f"{T}/outn") for n in fs] == ["ok.txt"], str(x["failed"]))
 
+    if os.name == "nt":
+        # each of these Windows would accept and then silently change
+        rules = {"reserved": ["CON.txt", "con", "COM¹.txt", "LPT1", "prn .log"],
+                 "dot or a space": ["a.", "b ", "dir./c.txt"],
+                 "character": ["q?.txt", "t<x>.txt", "f|g", 'say "hi".txt']}
+        named = [n for ns in rules.values() for n in ns]
+        deep = "deep/" + "/".join(["d" * 60] * 5) + "/f.txt"        # 300+ characters
+        arc_w = archive_named(T, ["ok.txt", deep] + named, f"{T}/winnames.crush")
+        x = ce.extract(arc_w, f"{T}/outw")
+        why = {p: n["why"] for n in x["notes"] for p in n["files"]}
+        for kind, ns in rules.items():
+            check(f"Windows: a name with a {kind} problem fails by name, with the reason",
+                  all(n in x["failed"] and kind.split()[-1] in why.get(n, "") for n in ns),
+                  str({n: why.get(n) for n in ns}))
+        lw = "\\\\?\\" + os.path.abspath(f"{T}/outw")
+        got = sorted(os.path.relpath(os.path.join(dp, n), lw).replace(os.sep, "/")
+                     for dp, _, fs in os.walk(lw) for n in fs)
+        check("Windows: nothing is written under a changed name", got == sorted(["ok.txt", deep]), str(got))
+        check("Windows: a path longer than 260 characters is restored byte-exact",
+              r("\\\\?\\" + os.path.abspath(f"{T}/outw/{deep}")) == f"content of {deep!r}\n".encode())
+
     print("Damage costs only what it touches")
     big = f"{T}/two"
     w(f"{big}/t.txt", text(30000, 3)); w(f"{big}/r.bin", os.urandom(200000))
