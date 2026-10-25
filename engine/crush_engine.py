@@ -2448,10 +2448,13 @@ def extract(path, dest, progress=None, verify=True, select=None, password=None,
     plan, seen, existing = {}, {}, []
     for i in sorted(want):
         e = files[i]
-        outp = _safe_join(root, e["p"])            # escape -> ValueError, nothing written
+        # The name first: Windows turns ...\nul into \\.\nul and 'x:y.txt' into
+        # a path on drive X:, so the escape check below would refuse the whole
+        # archive over one file a Linux or macOS machine named legitimately.
         why = _name_problem(e["p"])
         if why:
             fail(i, f"not written: {why}"); continue
+        outp = _safe_join(root, e["p"])            # escape -> ValueError, nothing written
         k = _collision_key(os.path.relpath(outp, root).replace(os.sep, "/"))
         if k in seen:
             fail(i, "not written: another file in this archive has the same name on this "

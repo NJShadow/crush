@@ -60,6 +60,24 @@ def text(n, seed=1):
     return " ".join(rnd.choice(words) for _ in range(n)).encode()
 
 
+def archive_named(T, names, arc):
+    """An archive whose entries are stored under `names` exactly - names this
+    machine may not be able to create, as an archive made on Linux or macOS
+    can carry. Each entry's content is its own name."""
+    d = tempfile.mkdtemp(dir=T)
+    fps = []
+    for i, n in enumerate(names):
+        w(f"{d}/{i}.txt", f"content of {n!r}\n")
+        fps.append((os.path.join(d, f"{i}.txt"), n))
+    real = ce.collect
+    ce.collect = lambda paths, skipped=None: list(fps)
+    try:
+        ce.compress([d], arc, tier="quick")
+    finally:
+        ce.collect = real
+    return arc
+
+
 def main():
     T = tempfile.mkdtemp(prefix="crush-safety-")
     try:
@@ -130,6 +148,61 @@ def run(T):
             check("nothing is written through a link that leads outside the destination",
                   r(f"{outside}/precious.txt") == b"precious" and sorted(os.listdir(outside)) == ["precious.txt"])
 
+    print("Names another system made")
+    hostile = ["nul", "x:y.txt", "meeting 12:30.txt", "NUL.txt", "sub/aux"]
+    arc_n = archive_named(T, ["ok.txt"] + hostile, f"{T}/names.crush")
+    try:
+        x = ce.extract(arc_n, f"{T}/outn")
+    except Exception as ex:
+        x = {"failed": None, "error": repr(ex)}
+    check("a device name or a ':' in one entry does not refuse the whole archive",
+          x["failed"] is not None and r(f"{T}/outn/ok.txt") == b"content of 'ok.txt'\n", str(x))
+    if os.name == "nt":
+        check("on Windows each of those entries fails by name, and nothing else is written",
+              sorted(x["failed"]) == sorted(hostile)
+              and [n for _, _, fs in os.walk(f"{T}/outn") for n in fs] == ["ok.txt"], str(x["failed"]))
+
+    if os.name == "nt":
+        # each of these Windows would accept and then silently change
+        rules = {"reserved": ["CON.txt", "con", "COM¹.txt", "LPT1", "prn .log"],
+                 "dot or a space": ["a.", "b ", "dir./c.txt"],
+                 "character": ["q?.txt", "t<x>.txt", "f|g", 'say "hi".txt']}
+        named = [n for ns in rules.values() for n in ns]
+        deep = "deep/" + "/".join(["d" * 60] * 5) + "/f.txt"        # 300+ characters
+        arc_w = archive_named(T, ["ok.txt", deep] + named, f"{T}/winnames.crush")
+        x = ce.extract(arc_w, f"{T}/outw")
+        why = {p: n["why"] for n in x["notes"] for p in n["files"]}
+        for kind, ns in rules.items():
+            check(f"Windows: a name with a {kind} problem fails by name, with the reason",
+                  all(n in x["failed"] and kind.split()[-1] in why.get(n, "") for n in ns),
+                  str({n: why.get(n) for n in ns}))
+        lw = "\\\\?\\" + os.path.abspath(f"{T}/outw")
+        got = sorted(os.path.relpath(os.path.join(dp, n), lw).replace(os.sep, "/")
+                     for dp, _, fs in os.walk(lw) for n in fs)
+        check("Windows: nothing is written under a changed name", got == sorted(["ok.txt", deep]), str(got))
+        check("Windows: a path longer than 260 characters is restored byte-exact",
+              r("\\\\?\\" + os.path.abspath(f"{T}/outw/{deep}")) == f"content of {deep!r}\n".encode())
+
+    # 'é' as one character (Windows, Linux) and as e + accent (macOS), and
+    # names differing only in case: one file on NTFS and APFS, two on Linux
+    folds = os.name == "nt" or sys.platform == "darwin"
+    for label, pair in (("upper and lower case", ["d/Report.txt", "d/report.txt"]),
+                        ("composed and decomposed accents", ["d/café.txt", "d/café.txt"])):
+        arc_c = archive_named(T, pair, f"{T}/fold.crush")
+        out_c = tempfile.mkdtemp(dir=T)
+        x = ce.extract(arc_c, out_c)
+        first = r(os.path.join(out_c, *pair[0].split("/"))) == f"content of {pair[0]!r}\n".encode()
+        if folds:
+            check(f"names differing only in {label}: the second fails by name, the first is intact",
+                  x["failed"] == [pair[1]] and first, str(x["failed"]))
+        else:
+            check(f"names differing only in {label}: both restored on a file system that keeps both",
+                  not x["failed"] and first, str(x["failed"]))
+    d = f"{T}/foldin"; w(f"{d}/café.txt", "one"); w(f"{d}/café.txt", "two")
+    if len(os.listdir(d)) == 2 and folds:
+        check("compressing two files whose names fold together here is refused",
+              raises(lambda: ce.compress([d], f"{T}/foldin.crush"), ValueError))
+
     print("Damage costs only what it touches")
     big = f"{T}/two"
     w(f"{big}/t.txt", text(30000, 3)); w(f"{big}/r.bin", os.urandom(200000))
@@ -161,6 +234,32 @@ def run(T):
             def read(self, n): return hdr[:n]
         check(f"{codec}: a length that disagrees with the index is refused",
               raises(lambda: ce._bundle_raw(F(), b), ValueError))
+
+    # python -O strips assert, so a check on archive data must raise instead
+    probe = r"""
+import random, sys
+sys.path.insert(0, sys.argv[1])
+import crush_genome as g
+rnd = random.Random(5)
+fa = b"".join(b">seq%d\n" % i + bytes(rnd.choice(b"ACGT") for _ in range(240)) + b"\n"
+              for i in range(200))
+res = g.Fasta.forward(fa)
+if not res:
+    print("no-payload"); sys.exit()
+def refused(fn):
+    try:
+        fn()
+    except ValueError:
+        return True
+    except Exception:
+        return False
+    return False
+print(refused(lambda: g.Fastq.inverse(res[0])), refused(lambda: g.Tabular.inverse(res[0])),
+      refused(lambda: g.unpack(b"XXXX" + res[0][4:])))
+"""
+    out = subprocess.run([sys.executable, "-O", "-c", probe, ENGINE],
+                         capture_output=True, text=True).stdout.strip()
+    check("Helix refuses a payload of the wrong kind under python -O", out == "True True True", out)
 
     print("Big files are streamed")
     old = ce.BIG_FILE

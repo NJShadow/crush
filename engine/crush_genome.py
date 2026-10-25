@@ -510,7 +510,8 @@ class Fastq:
     @staticmethod
     def inverse(payload: bytes, aux_=None) -> bytes:
         kind, b, groups = parse(payload)
-        assert kind == K_FASTQ
+        if kind != K_FASTQ:
+            raise ValueError("not a FASTQ payload")
         off = 0
         total, off = _get_varint(b, off)
         nrec, off = _get_varint(b, off)
@@ -648,7 +649,8 @@ class Fasta:
     @staticmethod
     def inverse(payload: bytes, aux_=None) -> bytes:
         kind, b, groups = parse(payload)
-        assert kind == K_FASTA
+        if kind != K_FASTA:
+            raise ValueError("not a FASTA payload")
         off = 0
         total, off = _get_varint(b, off)
         nlines, off = _get_varint(b, off)
@@ -846,7 +848,8 @@ class Tabular:
     @staticmethod
     def inverse(payload: bytes, aux_=None) -> bytes:
         kind, b, groups = parse(payload)
-        assert kind == K_TAB
+        if kind != K_TAB:
+            raise ValueError("not a tabular genome payload")
         off = 0
         total, off = _get_varint(b, off)
         delim = bytes([b[off]]); off += 1
@@ -1122,7 +1125,8 @@ def pack(data: bytes, path: str = "", log=None):
 
 
 def unpack(blob: bytes) -> bytes:
-    assert blob[:4] == b"GP01"
+    if blob[:4] != b"GP01":
+        raise ValueError("not a genome payload")
     crlf = blob[4]
     kind = blob[5]
     off = 6
